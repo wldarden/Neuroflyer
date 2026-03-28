@@ -26,6 +26,8 @@ public:
     [[nodiscard]] std::vector<float> get_scores() const;
     [[nodiscard]] std::size_t alive_count() const noexcept;
     [[nodiscard]] std::size_t teams_alive() const;
+    [[nodiscard]] const std::vector<int>& enemy_kills() const noexcept { return enemy_kills_; }
+    [[nodiscard]] const std::vector<int>& ally_kills() const noexcept { return ally_kills_; }
 
     [[nodiscard]] std::vector<Triangle>& ships() noexcept { return ships_; }
     [[nodiscard]] const std::vector<Triangle>& ships() const noexcept { return ships_; }
@@ -51,6 +53,8 @@ private:
     std::vector<Bullet> bullets_;
     std::vector<int> team_assignments_;
     std::vector<float> survival_ticks_;
+    std::vector<int> enemy_kills_;
+    std::vector<int> ally_kills_;
     std::mt19937 rng_;
     uint32_t tick_count_ = 0;
     bool over_ = false;

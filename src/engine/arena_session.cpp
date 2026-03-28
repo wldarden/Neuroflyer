@@ -18,6 +18,8 @@ ArenaSession::ArenaSession(const ArenaConfig& config, uint32_t seed)
     }
 
     survival_ticks_.resize(pop, 0.0f);
+    enemy_kills_.resize(pop, 0);
+    ally_kills_.resize(pop, 0);
 
     spawn_ships();
     spawn_obstacles();
@@ -220,6 +222,13 @@ void ArenaSession::resolve_bullet_ship_collisions() {
             if (hit) {
                 ships_[i].alive = false;
                 b.alive = false;
+                // Track kill: compare killer's team to victim's team
+                auto killer = static_cast<std::size_t>(b.owner_index);
+                if (team_assignments_[killer] == team_assignments_[i]) {
+                    ally_kills_[killer]++;
+                } else {
+                    enemy_kills_[killer]++;
+                }
                 break;
             }
         }
@@ -288,8 +297,12 @@ std::vector<float> ArenaSession::get_scores() const {
     std::vector<float> scores(config_.num_teams, 0.0f);
     for (std::size_t i = 0; i < ships_.size(); ++i) {
         int team = team_assignments_[i];
+        auto t = static_cast<std::size_t>(team);
         // 1 point per second at 60fps: survival_ticks / 60
-        scores[static_cast<std::size_t>(team)] += survival_ticks_[i] / 60.0f;
+        scores[t] += survival_ticks_[i] / 60.0f;
+        // +1000 per enemy kill, -1000 per ally kill
+        scores[t] += static_cast<float>(enemy_kills_[i]) * 1000.0f;
+        scores[t] -= static_cast<float>(ally_kills_[i]) * 1000.0f;
     }
     return scores;
 }

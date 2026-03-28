@@ -482,7 +482,7 @@ void draw_test_bench(TestBenchState& state,
             int off = 0;
             for (int si = 0; si < num_s; ++si) {
                 offsets[static_cast<std::size_t>(si)] = off;
-                off += state.design.sensors[static_cast<std::size_t>(si)].is_full_sensor ? 5 : 1;
+                off += state.design.sensors[static_cast<std::size_t>(si)].is_full_sensor ? 4 : 1;
             }
         }
 
@@ -735,7 +735,7 @@ void draw_test_bench(TestBenchState& state,
             // Compute this sensor's input offset
             int base_input = 0;
             for (int j = 0; j < si; ++j) {
-                base_input += state.design.sensors[static_cast<std::size_t>(j)].is_full_sensor ? 5 : 1;
+                base_input += state.design.sensors[static_cast<std::size_t>(j)].is_full_sensor ? 4 : 1;
             }
 
             const auto& inp = state.input_shared;
@@ -838,10 +838,6 @@ void draw_test_bench(TestBenchState& state,
                 cr = 255; cg = static_cast<uint8_t>(ep.distance * 80);
             } else if (ep.hit == HitType::Token) {
                 cr = theme::token_color.r; cg = theme::token_color.g; cb = theme::token_color.b;
-            } else if (ep.hit == HitType::AllyShip) {
-                cr = 80; cg = 180; cb = 255;   // blue for ally
-            } else if (ep.hit == HitType::FoeShip) {
-                cr = 255; cg = 100; cb = 60;   // orange for foe
             } else if (ep.is_full_sensor) {
                 cr = theme::sensor_idle.r; cg = theme::sensor_idle.g; cb = theme::sensor_idle.b;
             } else {
@@ -1082,7 +1078,7 @@ void draw_test_bench(TestBenchState& state,
                 for (int si = 0; si < num_sensors; ++si) {
                     input_offsets[static_cast<std::size_t>(si)] = off;
                     const auto& sd = tb_design.sensors[static_cast<std::size_t>(si)];
-                    off += sd.is_full_sensor ? 5 : 1;  // full sensor = dist+dng+val+con+ally, sight = dist only
+                    off += sd.is_full_sensor ? 4 : 1;  // full sensor = dist+dng+val+con, sight = dist only
                 }
             }
 

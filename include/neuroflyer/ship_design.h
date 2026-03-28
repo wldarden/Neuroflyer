@@ -42,7 +42,7 @@ struct ShipDesign {
 [[nodiscard]] inline std::size_t compute_input_size(const ShipDesign& design) {
     std::size_t size = 3;  // pos_x, pos_y, speed
     for (const auto& s : design.sensors) {
-        size += s.is_full_sensor ? 5 : 1;
+        size += s.is_full_sensor ? 4 : 1;
     }
     size += design.memory_slots;
     return size;

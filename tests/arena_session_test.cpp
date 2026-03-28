@@ -202,3 +202,72 @@ TEST(ArenaSessionTest, LastTeamStandingEndsRound) {
     arena.tick();
     EXPECT_TRUE(arena.is_over());
 }
+
+TEST(ArenaSessionTest, EnemyKillAwards1000Points) {
+    nf::ArenaConfig config;
+    config.num_teams = 2;
+    config.team_size = 1;
+    config.tower_count = 0;
+    config.token_count = 0;
+    config.time_limit_ticks = 1000;
+    config.world_width = 1000.0f;
+    config.world_height = 1000.0f;
+    nf::ArenaSession arena(config, 42);
+
+    // Place bullet from ship 0 (team 0) on top of ship 1 (team 1)
+    nf::Bullet b;
+    b.x = arena.ships()[1].x;
+    b.y = arena.ships()[1].y;
+    b.alive = true;
+    b.dir_x = 0.0f;
+    b.dir_y = -1.0f;
+    b.owner_index = 0;
+    b.distance_traveled = 0.0f;
+    b.max_range = 500.0f;
+    arena.add_bullet(b);
+    arena.resolve_bullet_ship_collisions();
+
+    EXPECT_EQ(arena.enemy_kills()[0], 1);
+    EXPECT_EQ(arena.ally_kills()[0], 0);
+
+    auto scores = arena.get_scores();
+    // Team 0 should have +1000 from the kill (plus survival ticks which are 0)
+    EXPECT_GE(scores[0], 1000.0f);
+    // Team 1 should have 0 (no kills, no survival yet)
+    EXPECT_NEAR(scores[1], 0.0f, 0.01f);
+}
+
+TEST(ArenaSessionTest, AllyKillRemoves1000Points) {
+    nf::ArenaConfig config;
+    config.num_teams = 2;
+    config.team_size = 2;  // 2 ships per team
+    config.tower_count = 0;
+    config.token_count = 0;
+    config.time_limit_ticks = 1000;
+    config.world_width = 1000.0f;
+    config.world_height = 1000.0f;
+    nf::ArenaSession arena(config, 42);
+
+    // Ship 0 and 1 are on team 0. Place bullet from ship 0 on ship 1.
+    ASSERT_EQ(arena.team_of(0), 0);
+    ASSERT_EQ(arena.team_of(1), 0);
+
+    nf::Bullet b;
+    b.x = arena.ships()[1].x;
+    b.y = arena.ships()[1].y;
+    b.alive = true;
+    b.dir_x = 0.0f;
+    b.dir_y = -1.0f;
+    b.owner_index = 0;
+    b.distance_traveled = 0.0f;
+    b.max_range = 500.0f;
+    arena.add_bullet(b);
+    arena.resolve_bullet_ship_collisions();
+
+    EXPECT_EQ(arena.ally_kills()[0], 1);
+    EXPECT_EQ(arena.enemy_kills()[0], 0);
+
+    auto scores = arena.get_scores();
+    // Team 0 should have -1000 from the ally kill
+    EXPECT_LE(scores[0], -999.0f);
+}

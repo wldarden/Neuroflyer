@@ -190,10 +190,6 @@ void GameView::render(const std::vector<GameSession>& sessions,
                     r = 255; g = static_cast<uint8_t>(ray.distance * 80);
                 } else if (ray.hit == HitType::Token) {
                     r = theme::token_color.r; g = theme::token_color.g; b = theme::token_color.b;
-                } else if (ray.hit == HitType::AllyShip) {
-                    r = 80; g = 180; b = 255;   // blue for ally
-                } else if (ray.hit == HitType::FoeShip) {
-                    r = 255; g = 100; b = 60;   // orange for foe
                 } else if (is_sensor) {
                     r = theme::sensor_idle.r; g = theme::sensor_idle.g; b = theme::sensor_idle.b;
                 } else {

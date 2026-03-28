@@ -6,10 +6,12 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 
 namespace neuroflyer {
 
@@ -582,6 +584,119 @@ void delete_autosave(const std::string& genome_dir) {
     if (fs::exists(tmp_path)) {
         fs::remove(tmp_path);
     }
+}
+
+void save_elite_variants_with_mrca(
+    const std::string& genome_dir,
+    const std::string& training_parent,
+    const MrcaTracker& tracker,
+    const std::vector<std::size_t>& elite_slots,
+    const std::vector<uint32_t>& individual_ids,
+    std::vector<Snapshot>& snapshots) {
+
+    // Single variant or empty — no MRCA needed
+    if (snapshots.size() <= 1) {
+        for (auto& snap : snapshots) {
+            snap.parent_name = training_parent;
+            save_variant(genome_dir, snap);
+        }
+        return;
+    }
+
+    auto tree = tracker.compute_mrca_tree(elite_slots);
+    if (tree.empty()) {
+        // No MRCA data — save all with training parent
+        for (auto& snap : snapshots) {
+            snap.parent_name = training_parent;
+            save_variant(genome_dir, snap);
+        }
+        return;
+    }
+
+    // Map individual_id -> snapshot index for matching tree leaves
+    std::unordered_map<uint32_t, std::size_t> id_to_snap;
+    for (std::size_t i = 0; i < individual_ids.size(); ++i) {
+        id_to_snap[individual_ids[i]] = i;
+    }
+
+    // Assign names to tree nodes:
+    //   Leaf nodes → variant snapshot names
+    //   Internal nodes → "MRCA gen N" (disambiguated if needed)
+    std::vector<std::string> node_names(tree.size());
+    std::unordered_map<uint32_t, int> gen_counter;
+
+    for (std::size_t i = 0; i < tree.size(); ++i) {
+        if (tree[i].children.empty()) {
+            auto it = id_to_snap.find(tree[i].entry.individual_id);
+            if (it != id_to_snap.end()) {
+                node_names[i] = snapshots[it->second].name;
+            }
+        } else {
+            uint32_t gen = tree[i].entry.generation;
+            int count = gen_counter[gen]++;
+            char buf[64];
+            if (count == 0) {
+                std::snprintf(buf, sizeof(buf), "MRCA gen %u", gen);
+            } else {
+                std::snprintf(buf, sizeof(buf), "MRCA gen %u (%d)", gen, count + 1);
+            }
+            node_names[i] = buf;
+        }
+    }
+
+    // Read lineage once, add all nodes, write once
+    auto lineage = read_lineage(genome_dir);
+
+    for (std::size_t i = 0; i < tree.size(); ++i) {
+        std::string parent_name;
+        if (tree[i].parent_index == SIZE_MAX) {
+            parent_name = training_parent;
+        } else {
+            parent_name = node_names[tree[i].parent_index];
+        }
+
+        if (tree[i].children.empty()) {
+            // Leaf: save .bin file and add lineage entry
+            auto it = id_to_snap.find(tree[i].entry.individual_id);
+            if (it == id_to_snap.end()) continue;
+            auto& snap = snapshots[it->second];
+            snap.parent_name = parent_name;
+
+            auto bin_filename = snap.name + ".bin";
+            auto bin_path = fs::path(genome_dir) / bin_filename;
+            save_snapshot(snap, bin_path.string());
+
+            json node;
+            node["name"] = snap.name;
+            node["file"] = bin_filename;
+            node["parent"] = parent_name;
+            node["generation"] = snap.generation;
+            node["created"] = iso8601_now();
+            lineage["nodes"].push_back(std::move(node));
+        } else {
+            // Internal MRCA: add stub entry (no .bin file)
+            json node;
+            node["name"] = node_names[i];
+            node["parent"] = parent_name;
+            node["generation"] = tree[i].entry.generation;
+            node["mrca_stub"] = true;
+
+            const auto& topo = tree[i].entry.topology;
+            std::string summary;
+            for (std::size_t l = 0; l + 1 < topo.layers.size(); ++l) {
+                if (!summary.empty()) summary += "/";
+                summary += std::to_string(topo.layers[l].output_size);
+            }
+            if (!summary.empty()) {
+                node["topology_summary"] = summary;
+            }
+
+            node["created"] = iso8601_now();
+            lineage["nodes"].push_back(std::move(node));
+        }
+    }
+
+    write_lineage(genome_dir, lineage);
 }
 
 } // namespace neuroflyer

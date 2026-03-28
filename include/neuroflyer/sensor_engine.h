@@ -32,20 +32,12 @@ struct SensorReading {
     HitType hit = HitType::Nothing;
 };
 
-/// A ship that can be detected by sensors (other ships in the arena).
-struct ShipTarget {
-    float x, y;
-    float radius = 12.0f;  // Triangle::SIZE
-    bool is_ally = false;   // true = same team, false = enemy
-};
-
 /// Query a single sensor. Dispatches on sensor type.
 [[nodiscard]] SensorReading query_sensor(
     const SensorDef& sensor,
     float ship_x, float ship_y,
     const std::vector<Tower>& towers,
-    const std::vector<Token>& tokens,
-    const std::vector<ShipTarget>& ships = {});
+    const std::vector<Token>& tokens);
 
 /// Build the complete neural net input vector from a ShipDesign.
 /// THE single source of truth — all consumers call this.
@@ -57,8 +49,7 @@ struct ShipTarget {
     float pts_per_token,
     const std::vector<Tower>& towers,
     const std::vector<Token>& tokens,
-    std::span<const float> memory,
-    const std::vector<ShipTarget>& ships = {});
+    std::span<const float> memory);
 
 /// Endpoint information for visualizing a sensor.
 struct SensorEndpoint {
@@ -75,8 +66,7 @@ struct SensorEndpoint {
     const ShipDesign& design,
     float ship_x, float ship_y,
     const std::vector<Tower>& towers,
-    const std::vector<Token>& tokens,
-    const std::vector<ShipTarget>& ships = {});
+    const std::vector<Token>& tokens);
 
 /// Decode neural net output into actions + memory.
 struct DecodedOutput {

@@ -18,13 +18,7 @@ namespace neuroflyer {
 }
 
 /// What a ray hit.
-enum class HitType : int {
-    Nothing   =  0,
-    Tower     = -1,
-    Token     =  1,
-    AllyShip  =  2,
-    FoeShip   = -2,
-};
+enum class HitType : int { Nothing = 0, Tower = -1, Token = 1 };
 
 /// Result per ray: distance (0-1 normalized) and what it hit.
 struct RayResult {

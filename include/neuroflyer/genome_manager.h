@@ -1,5 +1,7 @@
 #pragma once
+#include <neuroflyer/mrca_tracker.h>
 #include <neuroflyer/snapshot.h>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -71,5 +73,17 @@ void write_autosave(const std::string& genome_dir, const Snapshot& snapshot);
 
 /// Delete the auto-save file if it exists. Called on clean exit from training.
 void delete_autosave(const std::string& genome_dir);
+
+/// Save multiple elite variants with MRCA lineage stubs.
+/// Computes the MRCA tree from the tracker, creates MRCA stub entries in
+/// lineage.json, and saves each variant .bin with the correct parent.
+/// elite_slots, individual_ids, and snapshots must be parallel vectors.
+void save_elite_variants_with_mrca(
+    const std::string& genome_dir,
+    const std::string& training_parent,
+    const MrcaTracker& tracker,
+    const std::vector<std::size_t>& elite_slots,
+    const std::vector<uint32_t>& individual_ids,
+    std::vector<Snapshot>& snapshots);
 
 } // namespace neuroflyer

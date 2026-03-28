@@ -42,6 +42,21 @@ void draw_arena_game_info_view(const ArenaInfoState& info) {
     ImGui::Text("Ships: %zu / %zu", info.alive_count, info.total_count);
     ImGui::Text("Teams alive: %zu / %zu", info.teams_alive, info.num_teams);
     ImGui::Spacing();
+
+    // Per-team scores and kills
+    if (!info.team_scores.empty()) {
+        ImGui::Separator();
+        ImGui::Spacing();
+        for (std::size_t t = 0; t < info.num_teams; ++t) {
+            float score = (t < info.team_scores.size()) ? info.team_scores[t] : 0.0f;
+            int ek = (t < info.team_enemy_kills.size()) ? info.team_enemy_kills[t] : 0;
+            int ak = (t < info.team_ally_kills.size()) ? info.team_ally_kills[t] : 0;
+            ImGui::Text("Team %zu: %.0f pts  K:%d  TK:%d",
+                        t + 1, score, ek, ak);
+        }
+        ImGui::Spacing();
+    }
+
     ImGui::Separator();
     ImGui::Spacing();
 

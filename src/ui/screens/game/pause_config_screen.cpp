@@ -7,6 +7,7 @@
 
 #include <neuroflyer/config.h>
 #include <neuroflyer/evolution.h>
+#include <neuroflyer/genome_manager.h>
 #include <neuroflyer/screens/game/fly_session.h>
 #include <neuroflyer/ship_design.h>
 #include <neuroflyer/snapshot_io.h>
@@ -309,7 +310,14 @@ void PauseConfigScreen::draw_save_variants_tab(
                 "Enter base name:",
                 [this, &state](const std::string& base_name) {
                     auto& fs = get_fly_session_state();
+
+                    // Build snapshots, separating elites from non-elites
+                    std::vector<std::size_t> elite_slots;
+                    std::vector<uint32_t> elite_ids;
+                    std::vector<Snapshot> elite_snaps;
+                    std::vector<Snapshot> other_snaps;
                     int idx = 1;
+
                     for (std::size_t rank = 0; rank < sorted_indices_.size(); ++rank) {
                         if (rank >= selected_.size() || !selected_[rank]) continue;
                         std::size_t pop_idx = sorted_indices_[rank];
@@ -347,15 +355,35 @@ void PauseConfigScreen::draw_save_variants_tab(
                             }
                         }
 
-                        std::string path = fs.active_genome_dir + "/" +
-                            snap_name + ".bin";
-                        try {
-                            save_snapshot(snap, path);
-                        } catch (...) {
-                            // Silently skip on error
+                        if (pop_idx < fs.evo_config.elitism_count) {
+                            elite_slots.push_back(pop_idx);
+                            elite_ids.push_back(individual_hash(ind));
+                            elite_snaps.push_back(std::move(snap));
+                        } else {
+                            snap.parent_name = state.training_parent_name;
+                            other_snaps.push_back(std::move(snap));
                         }
                         ++idx;
                     }
+
+                    // Save non-elite variants directly
+                    for (auto& snap : other_snaps) {
+                        try {
+                            save_variant(fs.active_genome_dir, snap);
+                        } catch (...) {}
+                    }
+
+                    // Save elite variants with MRCA tree
+                    if (!elite_snaps.empty()) {
+                        try {
+                            save_elite_variants_with_mrca(
+                                fs.active_genome_dir,
+                                state.training_parent_name,
+                                fs.mrca_tracker,
+                                elite_slots, elite_ids, elite_snaps);
+                        } catch (...) {}
+                    }
+
                     state.variants_dirty = true;
                     state.lineage_dirty = true;
                 },

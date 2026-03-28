@@ -140,6 +140,7 @@ MainMenuScreen → push(FlySessionScreen) → push(PauseConfigScreen)
                → push(HangarScreen) → push(CreateGenomeScreen)
                                      → push(VariantViewerScreen)
                                         → embeds: NetViewerView, TestBenchView
+                                        → push(VariantNetEditorScreen) (zoomable net editor)
                                         → push(LineageTreeScreen)
                                         → push(FlySessionScreen) (training)
 ```
@@ -169,6 +170,8 @@ Genomes are stored as directories in `data/genomes/{name}/`:
 Each `.bin` file is self-describing: contains ShipDesign (sensors, memory), network topology, weights, parent link. Binary format versioned (v1 = original, v2 = evolvable flags).
 
 The hangar lets users browse genomes, create new ones with custom sensor/topology configs, view/promote/delete variants, launch training runs, and view cross-genome lineage trees. Deleting a genome relinks child genomes to the grandparent.
+
+**Variant saving from training:** The pause screen's "Save Variants" tab saves selected individuals with correct lineage. Elite individuals are saved via `save_elite_variants_with_mrca()` which computes the MRCA tree from the `MrcaTracker`, creates MRCA stub entries in lineage.json, and sets each variant's parent to the correct branch point. Non-elite individuals use `training_parent_name` directly. The `individual_hash()` function (in `evolution.h`) produces unique IDs for MRCA dedup.
 
 ## Sensor Engine
 
@@ -305,6 +308,7 @@ All new UI features MUST use the 4-layer UI framework. Do NOT create standalone 
 | Screen | `HangarScreen` | `ui/screens/hangar_screen.h` | `ui/screens/hangar/hangar_screen.cpp` |
 | Screen | `FlySessionScreen` | `ui/screens/fly_session_screen.h` | `ui/screens/game/fly_session_screen.cpp` |
 | Screen | `SettingsScreen` | `ui/screens/settings_screen.h` | `ui/screens/menu/settings_screen.cpp` |
+| Screen | `VariantNetEditorScreen` | `ui/screens/hangar/variant_net_editor_screen.h` | `ui/screens/hangar/variant_net_editor_screen.cpp` |
 | View | `TopologyPreviewView` | `ui/views/topology_preview_view.h` | `ui/views/topology_preview_view.cpp` |
 | View | `NetViewerView` | `ui/views/net_viewer_view.h` | `ui/views/net_viewer_view.cpp` |
 | View | `TestBenchView` | `ui/views/test_bench_view.h` | `ui/views/test_bench_view.cpp` |
@@ -322,7 +326,8 @@ All new UI features MUST use the 4-layer UI framework. Do NOT create standalone 
 - **Engine/UI split** — `src/engine/` has zero SDL/ImGui deps, `src/ui/` has all rendering. Clean separation.
 - **Composable components** — net viewer, test bench, lineage graph, fitness editor are not screen-specific. They use callbacks (e.g., `on_node_click`) instead of knowing about UIManager.
 - **Frame-based fly session** — game loop converted from blocking nested loops to one-frame-per-call, enabling clean pause/resume via screen transitions
-- **neuralnet-ui library** — generic neural net rendering lives in `libs/neuralnet-ui/`, NeuroFlyer-specific wrapper in `src/ui/renderers/variant_net_render.cpp`. Two-layer design: `render_neural_net()` (generic) + `render_variant_net()` (NeuroFlyer-specific).
+- **neuralnet-ui library** — generic neural net rendering lives in `libs/neuralnet-ui/`, NeuroFlyer-specific wrapper in `src/ui/renderers/variant_net_render.cpp`. Two-layer design: `render_neural_net()` (generic) + `render_variant_net()` (NeuroFlyer-specific). The renderer supports `text_scale` for scaled bitmap font at higher zoom levels.
+- **Net viewer zoom** — `NetViewerViewState` has `zoom`, `scroll_x`, `zoom_enabled` fields. The variant net editor defaults to 2x zoom with Shift+scroll to adjust. The view renders into a zoom-scaled off-screen SDL canvas and blits a viewport-sized window from it. Mouse coordinates are correctly mapped through the zoom+scroll transform.
 - **StructuredGenome** — evolved sensor configurations alongside weights and topology. Per-node activation functions.
 - **Recurrent not stacked frames** — net develops its own memory
 - **Sensor engine as single source of truth** — one set of functions for detection, input encoding, and output decoding. No inline math in screens. Visual sorting via display permutation (doesn't affect functional data order).

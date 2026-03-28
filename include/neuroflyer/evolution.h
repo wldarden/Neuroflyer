@@ -60,6 +60,9 @@ struct Individual {
     const ShipDesign& design,
     const neuralnet::NetworkTopology& topology);
 
+/// Hash an individual's weights to produce a unique ID for MRCA dedup.
+[[nodiscard]] uint32_t individual_hash(const Individual& ind);
+
 /// Check if two individuals have the same topology.
 [[nodiscard]] bool same_topology(const Individual& a, const Individual& b);
 

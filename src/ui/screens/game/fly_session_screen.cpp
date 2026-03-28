@@ -29,18 +29,6 @@ NetViewerViewState& get_fly_net_viewer_state() {
     return s_fly_net;
 }
 
-/// Hash an individual's weights to produce a unique ID for MRCA dedup.
-uint32_t individual_hash(const Individual& ind) {
-    uint32_t h = 0;
-    auto flat = ind.genome.flatten_all();
-    for (std::size_t i = 0; i < flat.size(); ++i) {
-        uint32_t bits;
-        std::memcpy(&bits, &flat[i], sizeof(bits));
-        h ^= bits + 0x9e3779b9 + (h << 6) + (h >> 2);
-    }
-    return h;
-}
-
 /// Record elite lineage for MRCA tracking.
 void record_mrca(FlySessionState& s) {
     std::vector<uint32_t> elite_ids;

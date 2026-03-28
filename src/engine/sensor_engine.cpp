@@ -43,8 +43,7 @@ namespace {
 SensorReading query_raycast(const SensorDef& sensor,
                             float ship_x, float ship_y,
                             const std::vector<Tower>& towers,
-                            const std::vector<Token>& tokens,
-                            const std::vector<ShipTarget>& ships) {
+                            const std::vector<Token>& tokens) {
     // Direction vector: angle 0 = forward (negative Y), positive angle = right
     float dx = std::sin(sensor.angle);
     float dy = -std::cos(sensor.angle);
@@ -72,15 +71,6 @@ SensorReading query_raycast(const SensorDef& sensor,
         }
     }
 
-    for (const auto& ship : ships) {
-        float t = ray_circle_intersect(ship_x, ship_y, dx, dy,
-                                       ship.x, ship.y, ship.radius);
-        if (t >= 0.0f && t < closest) {
-            closest = t;
-            closest_type = ship.is_ally ? HitType::AllyShip : HitType::FoeShip;
-        }
-    }
-
     return {closest / sensor.range, closest_type};
 }
 
@@ -89,8 +79,7 @@ SensorReading query_raycast(const SensorDef& sensor,
 SensorReading query_occulus(const SensorDef& sensor,
                             float ship_x, float ship_y,
                             const std::vector<Tower>& towers,
-                            const std::vector<Token>& tokens,
-                            const std::vector<ShipTarget>& ships) {
+                            const std::vector<Token>& tokens) {
     auto shape = compute_sensor_shape(sensor, ship_x, ship_y);
 
     float cx = shape.center_x;
@@ -144,14 +133,6 @@ SensorReading query_occulus(const SensorDef& sensor,
         }
     }
 
-    for (const auto& ship : ships) {
-        float d = check_overlap(ship.x, ship.y, ship.radius);
-        if (d >= 0.0f && d < closest_dist) {
-            closest_dist = d;
-            closest_type = ship.is_ally ? HitType::AllyShip : HitType::FoeShip;
-        }
-    }
-
     return {closest_dist, closest_type};
 }
 
@@ -160,14 +141,13 @@ SensorReading query_occulus(const SensorDef& sensor,
 SensorReading query_sensor(const SensorDef& sensor,
                            float ship_x, float ship_y,
                            const std::vector<Tower>& towers,
-                           const std::vector<Token>& tokens,
-                           const std::vector<ShipTarget>& ships) {
+                           const std::vector<Token>& tokens) {
     switch (sensor.type) {
     case SensorType::Occulus:
-        return query_occulus(sensor, ship_x, ship_y, towers, tokens, ships);
+        return query_occulus(sensor, ship_x, ship_y, towers, tokens);
     case SensorType::Raycast:
     default:
-        return query_raycast(sensor, ship_x, ship_y, towers, tokens, ships);
+        return query_raycast(sensor, ship_x, ship_y, towers, tokens);
     }
 }
 
@@ -175,8 +155,7 @@ std::vector<SensorEndpoint> query_sensors_with_endpoints(
     const ShipDesign& design,
     float ship_x, float ship_y,
     const std::vector<Tower>& towers,
-    const std::vector<Token>& tokens,
-    const std::vector<ShipTarget>& ships) {
+    const std::vector<Token>& tokens) {
 
     ShipDesign effective = design;
     if (effective.sensors.empty()) {
@@ -188,7 +167,7 @@ std::vector<SensorEndpoint> query_sensors_with_endpoints(
     endpoints.reserve(effective.sensors.size());
 
     for (const auto& sensor : effective.sensors) {
-        auto reading = query_sensor(sensor, ship_x, ship_y, towers, tokens, ships);
+        auto reading = query_sensor(sensor, ship_x, ship_y, towers, tokens);
 
         SensorEndpoint ep{};
         ep.distance = reading.distance;
@@ -226,8 +205,7 @@ std::vector<float> build_ship_input(
     float pts_per_token,
     const std::vector<Tower>& towers,
     const std::vector<Token>& tokens,
-    std::span<const float> memory,
-    const std::vector<ShipTarget>& ships) {
+    std::span<const float> memory) {
 
     ShipDesign effective = design;
     if (effective.sensors.empty()) {
@@ -241,7 +219,7 @@ std::vector<float> build_ship_input(
     float value_scale = std::max(pts_per_token * 2.0f, 0.1f);
 
     for (const auto& sensor : effective.sensors) {
-        auto reading = query_sensor(sensor, ship_x, ship_y, towers, tokens, ships);
+        auto reading = query_sensor(sensor, ship_x, ship_y, towers, tokens);
         input.push_back(reading.distance);
         if (sensor.is_full_sensor) {
             bool is_tower = (reading.hit == HitType::Tower);
@@ -250,11 +228,6 @@ std::vector<float> build_ship_input(
             float valuable = is_token ? std::min(pts_per_token / value_scale, 1.0f) : 0.0f;
             input.push_back(valuable);
             input.push_back(is_token ? 1.0f : 0.0f);
-            // is_ally: 1 = friend, -1 = foe, 0 = anything else
-            float ally = 0.0f;
-            if (reading.hit == HitType::AllyShip) ally = 1.0f;
-            else if (reading.hit == HitType::FoeShip) ally = -1.0f;
-            input.push_back(ally);
         }
     }
 
@@ -335,8 +308,6 @@ std::vector<std::string> build_input_labels(const ShipDesign& design) {
             labels.push_back(buf);
             std::snprintf(buf, sizeof(buf), "SNS %s ?", prefix);
             labels.push_back(buf);
-            std::snprintf(buf, sizeof(buf), "SNS %s @", prefix);
-            labels.push_back(buf);
         }
     }
 
@@ -363,7 +334,6 @@ std::vector<NodeStyle> build_input_colors(const ShipDesign& design) {
         if (!s.is_full_sensor) {
             colors.push_back(ns(theme::node_sight));
         } else {
-            colors.push_back(ns(theme::node_sensor));
             colors.push_back(ns(theme::node_sensor));
             colors.push_back(ns(theme::node_sensor));
             colors.push_back(ns(theme::node_sensor));
@@ -395,7 +365,7 @@ std::vector<std::size_t> build_display_order(const ShipDesign& design) {
     std::vector<SensorSpan> spans;
     std::size_t idx = 0;
     for (const auto& s : design.sensors) {
-        std::size_t n = s.is_full_sensor ? 5 : 1;
+        std::size_t n = s.is_full_sensor ? 4 : 1;
         spans.push_back({idx, n, s.angle});
         idx += n;
     }

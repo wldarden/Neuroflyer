@@ -173,15 +173,6 @@ void ArenaGameScreen::tick_arena(AppState& /*state*/) {
     for (std::size_t i = 0; i < ships.size(); ++i) {
         if (!ships[i].alive) continue;
 
-        // Build ship targets: other alive ships, classified as ally or foe
-        int my_team = arena_->team_of(i);
-        std::vector<ShipTarget> ship_targets;
-        for (std::size_t j = 0; j < ships.size(); ++j) {
-            if (j == i || !ships[j].alive) continue;
-            ship_targets.push_back({ships[j].x, ships[j].y, Triangle::SIZE,
-                                    arena_->team_of(j) == my_team});
-        }
-
         // Build neural net input using sensor engine
         // Arena mode uses world-relative positions; we pass world dimensions
         // and use 0 scroll_speed since arena is static
@@ -192,8 +183,7 @@ void ArenaGameScreen::tick_arena(AppState& /*state*/) {
             0.0f,  // no scroll speed in arena
             0.0f,  // pts_per_token not used for scoring here
             arena_->towers(), arena_->tokens(),
-            recurrent_states_[i],
-            ship_targets);
+            recurrent_states_[i]);
 
         auto output = networks_[i].forward(input);
 
@@ -313,6 +303,18 @@ void ArenaGameScreen::render_arena(Renderer& renderer) {
     info.total_count = config_.population_size();
     info.teams_alive = arena_->teams_alive();
     info.num_teams = config_.num_teams;
+
+    // Aggregate per-ship kills into per-team totals
+    info.team_enemy_kills.assign(config_.num_teams, 0);
+    info.team_ally_kills.assign(config_.num_teams, 0);
+    const auto& ek = arena_->enemy_kills();
+    const auto& ak = arena_->ally_kills();
+    for (std::size_t i = 0; i < ek.size(); ++i) {
+        auto t = static_cast<std::size_t>(arena_->team_of(i));
+        info.team_enemy_kills[t] += ek[i];
+        info.team_ally_kills[t] += ak[i];
+    }
+    info.team_scores = arena_->get_scores();
 
     draw_arena_game_info_view(info);
 

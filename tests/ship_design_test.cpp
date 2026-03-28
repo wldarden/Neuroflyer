@@ -11,7 +11,7 @@ TEST(ShipDesignTest, InputSize_AllFullSensors) {
         {nf::SensorType::Raycast, 0.0f, 300.0f, 0.0f, true},
         {nf::SensorType::Raycast, 0.5f, 300.0f, 0.0f, true},
     };
-    EXPECT_EQ(nf::compute_input_size(design), 17u);
+    EXPECT_EQ(nf::compute_input_size(design), 15u);
 }
 
 TEST(ShipDesignTest, InputSize_MixedSensors) {
@@ -22,7 +22,7 @@ TEST(ShipDesignTest, InputSize_MixedSensors) {
         {nf::SensorType::Raycast, 0.5f, 300.0f, 0.0f, true},
         {nf::SensorType::Occulus, 1.0f, 120.0f, 0.3f, true},
     };
-    EXPECT_EQ(nf::compute_input_size(design), 16u);
+    EXPECT_EQ(nf::compute_input_size(design), 14u);
 }
 
 TEST(ShipDesignTest, InputSize_NoSensors) {
