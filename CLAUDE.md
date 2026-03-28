@@ -2,9 +2,14 @@
 
 A neural net playground — vertical-scrolling arcade game where 100 neural nets learn to dodge towers and collect tokens via neuroevolution, with real-time brain visualization and a genome management hangar.
 
+## Repository
+
+- **GitHub:** [wldarden/Neuroflyer](https://github.com/wldarden/Neuroflyer)
+- **Dependencies:** [neuralnet](https://github.com/wldarden/neuralnet), [neuralnet-ui](https://github.com/wldarden/neuralnet-ui), [evolve](https://github.com/wldarden/evolve) (expected at `../libs/`)
+
 ## Architecture
 
-NeuroFlyer is a standalone app in the C++ monorepo. It shares `libs/neuralnet` and `libs/evolve` but has no dependency on EcoSim or AntSim.
+NeuroFlyer is an independent repo. It depends on the `neuralnet`, `neuralnet-ui`, and `evolve` library repos (expected at `../libs/` in the workspace). No dependency on EcoSim or AntSim.
 
 The app uses a **4-layer UI architecture** managed by `UIManager`:
 
@@ -222,10 +227,13 @@ Position multipliers scale score by screen position (center/edge, top/bottom).
 
 ## Building & Running
 
+Prerequisites: library repos (`neuralnet`, `neuralnet-ui`, `evolve`) must be present at `../libs/`.
+
 ```bash
+cd neuroflyer
 cmake -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build
-./build/neuroflyer/neuroflyer
+./build/neuroflyer
 ```
 
 ## Backlog
@@ -332,4 +340,4 @@ All new UI features MUST use the 4-layer UI framework. Do NOT create standalone 
 - **Recurrent not stacked frames** — net develops its own memory
 - **Sensor engine as single source of truth** — one set of functions for detection, input encoding, and output decoding. No inline math in screens. Visual sorting via display permutation (doesn't affect functional data order).
 - **ShipDesign per variant, not global** — sensor config lives on each saved variant, not on GameConfig. Editing one variant's sensors doesn't affect others.
-- **Shared neuralnet/evolve libs** — same code powers EcoSim, NeuroFlyer, and AntSim
+- **Shared library repos** — neuralnet and evolve are independent repos shared by EcoSim, NeuroFlyer, and AntSim
