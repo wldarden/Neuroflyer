@@ -43,6 +43,8 @@ FetchContent_MakeAvailable(evolve neuralnet neuralnet-ui json imgui)
 
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
+enable_testing()
+include(GoogleTest)
 
 # Build ImGui as static library (imgui_lib to avoid FetchContent name collision)
 add_library(imgui_lib STATIC
@@ -120,7 +122,7 @@ target_include_directories(neuroflyer PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/game-ui/include
 )
 target_link_libraries(neuroflyer PRIVATE
-    neuralnet neuralnet-ui evolve SDL2::SDL2 SDL2_image::SDL2_image imgui nlohmann_json::nlohmann_json project_warnings
+    neuralnet neuralnet-ui evolve SDL2::SDL2 SDL2_image::SDL2_image imgui_lib nlohmann_json::nlohmann_json project_warnings
 )
 
 add_subdirectory(tests)
