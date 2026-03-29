@@ -6,6 +6,7 @@
 #include <neuroflyer/ui/ui_manager.h>
 
 #include <neuroflyer/ui/modals/confirm_modal.h>
+#include <neuroflyer/ui/modals/fighter_pairing_modal.h>
 #include <neuroflyer/ui/modals/input_modal.h>
 #include <neuroflyer/components/lineage_graph.h>
 #include <neuroflyer/components/test_bench.h>
@@ -40,6 +41,11 @@ std::string VariantViewerScreen::variant_path(
     return vs_.genome_dir + "/" + hdr.name + ".bin";
 }
 
+std::string VariantViewerScreen::squad_variant_path(
+    const SnapshotHeader& hdr) const {
+    return vs_.genome_dir + "/squad/" + hdr.name + ".bin";
+}
+
 // ==================== on_enter ====================
 
 void VariantViewerScreen::on_enter() {
@@ -51,6 +57,217 @@ void VariantViewerScreen::on_enter() {
     // Reset stale interaction flags
     promote_pending_ = false;
     delete_pending_ = false;
+    squad_delete_pending_ = false;
+}
+
+// ==================== Tab bar drawing ====================
+
+void VariantViewerScreen::draw_tab_bar() {
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+    ImVec2 cursor = ImGui::GetCursorScreenPos();
+    constexpr float TAB_W = 120.0f;
+    constexpr float TAB_H = 28.0f;
+    constexpr float TAB_GAP = 4.0f;
+    constexpr float UNDERLINE_H = 3.0f;
+
+    struct TabDef {
+        const char* label;
+        NetTypeTab tab;
+        ImU32 underline_color;
+        bool disabled;
+    };
+
+    // Purple #a29bfe, Yellow #f9ca24, Gray for disabled
+    TabDef tabs[] = {
+        {"Fighters",  NetTypeTab::Fighters,  IM_COL32(162, 155, 254, 255), false},
+        {"Squad Nets", NetTypeTab::SquadNets, IM_COL32(249, 202, 36, 255),  false},
+        {"Commander",  NetTypeTab::Commander, IM_COL32(100, 100, 100, 255), true},
+    };
+
+    float x = cursor.x;
+    for (auto& t : tabs) {
+        ImGui::SetCursorScreenPos(ImVec2(x, cursor.y));
+
+        if (t.disabled) {
+            ImGui::BeginDisabled();
+        }
+
+        bool clicked = ImGui::Button(t.label, ImVec2(TAB_W, TAB_H));
+
+        if (t.disabled) {
+            ImGui::EndDisabled();
+        }
+
+        // Draw underline on active tab
+        if (active_tab_ == t.tab) {
+            ImVec2 p0(x, cursor.y + TAB_H + 1.0f);
+            ImVec2 p1(x + TAB_W, cursor.y + TAB_H + 1.0f + UNDERLINE_H);
+            draw_list->AddRectFilled(p0, p1, t.underline_color);
+        }
+
+        if (clicked && !t.disabled && active_tab_ != t.tab) {
+            active_tab_ = t.tab;
+        }
+
+        x += TAB_W + TAB_GAP;
+    }
+
+    ImGui::SetCursorScreenPos(ImVec2(cursor.x,
+        cursor.y + TAB_H + UNDERLINE_H + 6.0f));
+    ImGui::Dummy(ImVec2(0, 2));
+}
+
+// ==================== Squad variant list ====================
+
+VariantViewerScreen::Action VariantViewerScreen::draw_squad_list(
+    float content_h) {
+    Action action = Action::Stay;
+
+    if (squad_variants_.empty()) {
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
+            "(no squad net variants found)");
+    } else {
+        if (ImGui::BeginTable("##SquadTable", 4,
+                ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg |
+                ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp,
+                ImVec2(0, content_h - 100.0f))) {
+            ImGui::TableSetupScrollFreeze(0, 1);
+            ImGui::TableSetupColumn("Name",
+                ImGuiTableColumnFlags_None, 0.30f);
+            ImGui::TableSetupColumn("Gen",
+                ImGuiTableColumnFlags_None, 0.10f);
+            ImGui::TableSetupColumn("Paired Fighter",
+                ImGuiTableColumnFlags_None, 0.30f);
+            ImGui::TableSetupColumn("Created",
+                ImGuiTableColumnFlags_None, 0.30f);
+            ImGui::TableHeadersRow();
+
+            for (int i = 0;
+                 i < static_cast<int>(squad_variants_.size()); ++i) {
+                const auto& sv =
+                    squad_variants_[static_cast<std::size_t>(i)];
+                ImGui::TableNextRow();
+
+                ImGui::TableNextColumn();
+                bool is_selected = (squad_selected_idx_ == i);
+                if (ImGui::Selectable(sv.name.c_str(), is_selected,
+                        ImGuiSelectableFlags_SpanAllColumns)) {
+                    squad_selected_idx_ = i;
+                }
+
+                ImGui::TableNextColumn();
+                ImGui::Text("%u", sv.generation);
+
+                ImGui::TableNextColumn();
+                if (!sv.paired_fighter_name.empty()) {
+                    ImGui::TextColored(
+                        ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "%s",
+                        sv.paired_fighter_name.c_str());
+                } else {
+                    ImGui::TextColored(
+                        ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "---");
+                }
+
+                ImGui::TableNextColumn();
+                if (sv.created_timestamp > 0) {
+                    ImGui::TextColored(
+                        ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "%s",
+                        format_short_date(sv.created_timestamp).c_str());
+                } else {
+                    ImGui::TextColored(
+                        ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "---");
+                }
+            }
+
+            ImGui::EndTable();
+        }
+    }
+
+    return action;
+}
+
+// ==================== Squad action panel ====================
+
+VariantViewerScreen::Action VariantViewerScreen::draw_squad_actions(
+    AppState& /*state*/, UIManager& /*ui*/, float /*content_h*/) {
+    Action action = Action::Stay;
+
+    constexpr float BTN_W = 280.0f;
+    constexpr float BTN_H = 35.0f;
+
+    // ---- Training Scenarios ----
+    ImGui::TextColored(
+        ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Training Scenarios");
+    ImGui::Dummy(ImVec2(0, 3));
+
+    if (ImGui::Button("Squad vs Squad", ImVec2(BTN_W, BTN_H))) {
+        action = Action::SquadTrainVsSquad;
+    }
+    ImGui::Dummy(ImVec2(0, 3));
+    if (ImGui::Button("Base Attack", ImVec2(BTN_W, BTN_H))) {
+        action = Action::SquadTrainBaseAttack;
+    }
+    ImGui::Dummy(ImVec2(0, 3));
+    ImGui::BeginDisabled();
+    ImGui::Button("Base Defense (Coming Soon)", ImVec2(BTN_W, BTN_H));
+    ImGui::EndDisabled();
+
+    ImGui::Dummy(ImVec2(0, 10));
+    ImGui::Separator();
+    ImGui::Dummy(ImVec2(0, 5));
+
+    // ---- Fighter Pairing ----
+    ImGui::TextColored(
+        ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Fighter Pairing");
+    ImGui::Dummy(ImVec2(0, 3));
+
+    if (paired_fighter_name_.empty()) {
+        ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f),
+            "No fighter selected");
+    } else {
+        ImGui::Text("Paired: %s", paired_fighter_name_.c_str());
+    }
+    ImGui::Dummy(ImVec2(0, 3));
+    if (ImGui::Button("[Change]##pairing", ImVec2(100, 28))) {
+        action = Action::SquadChangeFighter;
+    }
+
+    ImGui::Dummy(ImVec2(0, 10));
+    ImGui::Separator();
+    ImGui::Dummy(ImVec2(0, 5));
+
+    // ---- Inspection (if squad variant selected) ----
+    bool has_selection = !squad_variants_.empty() &&
+        squad_selected_idx_ >= 0 &&
+        static_cast<std::size_t>(squad_selected_idx_) < squad_variants_.size();
+
+    if (has_selection) {
+        const auto& sel =
+            squad_variants_[static_cast<std::size_t>(squad_selected_idx_)];
+
+        ImGui::TextColored(
+            ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Inspection");
+        ImGui::Dummy(ImVec2(0, 3));
+        ImGui::Text("Selected: %s", sel.name.c_str());
+        ImGui::Dummy(ImVec2(0, 3));
+        if (ImGui::Button("View Squad Net", ImVec2(BTN_W, BTN_H))) {
+            action = Action::SquadViewNet;
+        }
+
+        ImGui::Dummy(ImVec2(0, 10));
+        ImGui::Separator();
+        ImGui::Dummy(ImVec2(0, 5));
+
+        // ---- Management ----
+        ImGui::TextColored(
+            ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Management");
+        ImGui::Dummy(ImVec2(0, 3));
+        if (ImGui::Button("Delete Variant##squad", ImVec2(BTN_W, BTN_H))) {
+            action = Action::SquadDelete;
+        }
+    }
+
+    return action;
 }
 
 // ==================== Variant list drawing ====================
@@ -69,6 +286,17 @@ VariantViewerScreen::Action VariantViewerScreen::draw_variant_list(
         }
         vs_.selected_idx = std::clamp(vs_.selected_idx, 0,
             std::max(0, static_cast<int>(vs_.variants.size()) - 1));
+
+        // Also refresh squad variants
+        try {
+            squad_variants_ = list_squad_variants(vs_.genome_dir);
+        } catch (const std::exception& e) {
+            std::cerr << "Failed to list squad variants: " << e.what() << "\n";
+            squad_variants_.clear();
+        }
+        squad_selected_idx_ = std::clamp(squad_selected_idx_, 0,
+            std::max(0, static_cast<int>(squad_variants_.size()) - 1));
+
         state.variants_dirty = false;
     }
 
@@ -106,74 +334,85 @@ VariantViewerScreen::Action VariantViewerScreen::draw_variant_list(
     ImGui::BeginChild("##VariantList", ImVec2(left_w, content_h), true);
 
     ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Variants");
-    ImGui::Dummy(ImVec2(0, 5));
+    ImGui::Dummy(ImVec2(0, 3));
 
-    if (vs_.variants.empty()) {
-        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
-            "(no variants found)");
-    } else {
-        // Table header
-        if (ImGui::BeginTable("##VarTable", 5,
-                ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg |
-                ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp,
-                ImVec2(0, content_h - 60.0f))) {
-            ImGui::TableSetupScrollFreeze(0, 1);
-            ImGui::TableSetupColumn("Name",
-                ImGuiTableColumnFlags_None, 0.30f);
-            ImGui::TableSetupColumn("Gen",
-                ImGuiTableColumnFlags_None, 0.10f);
-            ImGui::TableSetupColumn("Runs",
-                ImGuiTableColumnFlags_None, 0.10f);
-            ImGui::TableSetupColumn("Created",
-                ImGuiTableColumnFlags_None, 0.18f);
-            ImGui::TableSetupColumn("Parent",
-                ImGuiTableColumnFlags_None, 0.32f);
-            ImGui::TableHeadersRow();
+    // Tab bar: Fighters | Squad Nets | Commander
+    draw_tab_bar();
 
-            for (int i = 0;
-                 i < static_cast<int>(vs_.variants.size()); ++i) {
-                const auto& v =
-                    vs_.variants[static_cast<std::size_t>(i)];
-                ImGui::TableNextRow();
+    if (active_tab_ == NetTypeTab::Fighters) {
+        // ---- Fighter variant table ----
+        if (vs_.variants.empty()) {
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
+                "(no variants found)");
+        } else {
+            if (ImGui::BeginTable("##VarTable", 5,
+                    ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg |
+                    ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp,
+                    ImVec2(0, content_h - 100.0f))) {
+                ImGui::TableSetupScrollFreeze(0, 1);
+                ImGui::TableSetupColumn("Name",
+                    ImGuiTableColumnFlags_None, 0.30f);
+                ImGui::TableSetupColumn("Gen",
+                    ImGuiTableColumnFlags_None, 0.10f);
+                ImGui::TableSetupColumn("Runs",
+                    ImGuiTableColumnFlags_None, 0.10f);
+                ImGui::TableSetupColumn("Created",
+                    ImGuiTableColumnFlags_None, 0.18f);
+                ImGui::TableSetupColumn("Parent",
+                    ImGuiTableColumnFlags_None, 0.32f);
+                ImGui::TableHeadersRow();
 
-                ImGui::TableNextColumn();
-                bool is_selected = (vs_.selected_idx == i);
-                if (ImGui::Selectable(v.name.c_str(), is_selected,
-                        ImGuiSelectableFlags_SpanAllColumns)) {
-                    vs_.selected_idx = i;
+                for (int i = 0;
+                     i < static_cast<int>(vs_.variants.size()); ++i) {
+                    const auto& v =
+                        vs_.variants[static_cast<std::size_t>(i)];
+                    ImGui::TableNextRow();
+
+                    ImGui::TableNextColumn();
+                    bool is_selected = (vs_.selected_idx == i);
+                    if (ImGui::Selectable(v.name.c_str(), is_selected,
+                            ImGuiSelectableFlags_SpanAllColumns)) {
+                        vs_.selected_idx = i;
+                    }
+
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", v.generation);
+
+                    ImGui::TableNextColumn();
+                    if (v.run_count > 0) {
+                        ImGui::Text("%u", v.run_count);
+                    } else {
+                        ImGui::TextColored(
+                            ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "0");
+                    }
+
+                    ImGui::TableNextColumn();
+                    if (v.created_timestamp > 0) {
+                        ImGui::TextColored(
+                            ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "%s",
+                            format_short_date(v.created_timestamp).c_str());
+                    } else {
+                        ImGui::TextColored(
+                            ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "---");
+                    }
+
+                    ImGui::TableNextColumn();
+                    if (v.parent_name.empty()) {
+                        ImGui::TextColored(
+                            ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "(root)");
+                    } else {
+                        ImGui::Text("%s", v.parent_name.c_str());
+                    }
                 }
 
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", v.generation);
-
-                ImGui::TableNextColumn();
-                if (v.run_count > 0) {
-                    ImGui::Text("%u", v.run_count);
-                } else {
-                    ImGui::TextColored(
-                        ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "0");
-                }
-
-                ImGui::TableNextColumn();
-                if (v.created_timestamp > 0) {
-                    ImGui::TextColored(
-                        ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "%s",
-                        format_short_date(v.created_timestamp).c_str());
-                } else {
-                    ImGui::TextColored(
-                        ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "---");
-                }
-
-                ImGui::TableNextColumn();
-                if (v.parent_name.empty()) {
-                    ImGui::TextColored(
-                        ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "(root)");
-                } else {
-                    ImGui::Text("%s", v.parent_name.c_str());
-                }
+                ImGui::EndTable();
             }
-
-            ImGui::EndTable();
+        }
+    } else if (active_tab_ == NetTypeTab::SquadNets) {
+        // ---- Squad net variant table ----
+        auto squad_action = draw_squad_list(content_h);
+        if (squad_action != Action::Stay) {
+            action = squad_action;
         }
     }
 
@@ -197,7 +436,13 @@ VariantViewerScreen::Action VariantViewerScreen::draw_variant_list(
     ImGui::SameLine();
     ImGui::BeginChild("##VariantActions", ImVec2(0, content_h), true);
 
-    if (!vs_.variants.empty() &&
+    if (active_tab_ == NetTypeTab::SquadNets) {
+        // ---- Squad net action panel ----
+        auto squad_act = draw_squad_actions(state, ui, content_h);
+        if (squad_act != Action::Stay) {
+            action = squad_act;
+        }
+    } else if (!vs_.variants.empty() &&
         vs_.selected_idx >= 0 &&
         static_cast<std::size_t>(vs_.selected_idx) < vs_.variants.size()) {
 
@@ -560,6 +805,19 @@ void VariantViewerScreen::on_draw(
             std::cerr << "Delete failed: " << e.what() << "\n";
         }
     }
+    if (squad_delete_pending_) {
+        squad_delete_pending_ = false;
+        try {
+            delete_squad_variant(vs_.genome_dir, squad_delete_name_);
+            std::cout << "Deleted squad variant '" << squad_delete_name_ << "'\n";
+            state.variants_dirty = true;
+            if (squad_selected_idx_ > 0) {
+                --squad_selected_idx_;
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "Squad delete failed: " << e.what() << "\n";
+        }
+    }
 
     // Detect genome change and reinitialize
     if (state.active_genome != last_genome_) {
@@ -572,6 +830,10 @@ void VariantViewerScreen::on_draw(
         state.lineage_dirty = true;
         evo_loaded_ = false;
         sub_view_ = SubView::List;
+        // Reset squad state for new genome
+        squad_variants_.clear();
+        squad_selected_idx_ = 0;
+        paired_fighter_name_.clear();
     }
 
     // Ensure lineage graph rebuilds with cross-genome info
@@ -812,6 +1074,99 @@ void VariantViewerScreen::on_draw(
             ui.push_screen(
                 std::make_unique<LineageTreeScreen>());
             break;
+
+        // ---- Squad actions ----
+        case Action::SquadTrainVsSquad: {
+            if (paired_fighter_name_.empty()) {
+                ui.push_modal(std::make_unique<FighterPairingModal>(
+                    vs_.variants,
+                    [this](const std::string& name) {
+                        paired_fighter_name_ = name;
+                    }));
+            } else {
+                state.squad_training_mode = true;
+                state.base_attack_mode = false;
+                state.squad_paired_fighter_name = paired_fighter_name_;
+                state.squad_training_genome_dir = vs_.genome_dir;
+                state.return_to_variant_view = true;
+                ui.push_screen(std::make_unique<ArenaConfigScreen>());
+            }
+            break;
+        }
+
+        case Action::SquadTrainBaseAttack: {
+            if (paired_fighter_name_.empty()) {
+                ui.push_modal(std::make_unique<FighterPairingModal>(
+                    vs_.variants,
+                    [this](const std::string& name) {
+                        paired_fighter_name_ = name;
+                    }));
+            } else {
+                state.squad_training_mode = true;
+                state.base_attack_mode = true;
+                state.squad_paired_fighter_name = paired_fighter_name_;
+                state.squad_training_genome_dir = vs_.genome_dir;
+                state.return_to_variant_view = true;
+                ui.push_screen(std::make_unique<ArenaConfigScreen>());
+            }
+            break;
+        }
+
+        case Action::SquadChangeFighter: {
+            ui.push_modal(std::make_unique<FighterPairingModal>(
+                vs_.variants,
+                [this](const std::string& name) {
+                    paired_fighter_name_ = name;
+                }));
+            break;
+        }
+
+        case Action::SquadViewNet: {
+            if (!squad_variants_.empty() &&
+                squad_selected_idx_ >= 0 &&
+                static_cast<std::size_t>(squad_selected_idx_)
+                    < squad_variants_.size()) {
+                const auto& sel_sq = squad_variants_[
+                    static_cast<std::size_t>(squad_selected_idx_)];
+                std::string sq_path = squad_variant_path(sel_sq);
+                try {
+                    auto snap = load_snapshot(sq_path);
+                    auto ind = snapshot_to_individual(snap);
+                    auto net = ind.build_network();
+                    ui.push_screen(std::make_unique<VariantNetEditorScreen>(
+                        std::move(ind), std::move(net), snap.ship_design,
+                        sq_path, sel_sq.name));
+                } catch (const std::exception& e) {
+                    std::cerr
+                        << "Failed to load squad variant for viewing: "
+                        << e.what() << "\n";
+                }
+            }
+            break;
+        }
+
+        case Action::SquadDelete: {
+            if (!squad_variants_.empty() &&
+                squad_selected_idx_ >= 0 &&
+                static_cast<std::size_t>(squad_selected_idx_)
+                    < squad_variants_.size()) {
+                const auto& sel_sq = squad_variants_[
+                    static_cast<std::size_t>(squad_selected_idx_)];
+                char msg[256];
+                std::snprintf(msg, sizeof(msg),
+                    "Delete squad variant '%s'?",
+                    sel_sq.name.c_str());
+                std::string del_name = sel_sq.name;
+                ui.push_modal(std::make_unique<ConfirmModal>(
+                    "Delete Squad Variant", msg,
+                    [this, del_name]() {
+                        squad_delete_name_ = del_name;
+                        squad_delete_pending_ = true;
+                    }));
+            }
+            break;
+        }
+
         case Action::Stay:
             break;
         }

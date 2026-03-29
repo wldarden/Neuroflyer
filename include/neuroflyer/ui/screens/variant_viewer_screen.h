@@ -13,6 +13,9 @@
 
 namespace neuroflyer {
 
+/// Net type tabs for the variant viewer.
+enum class NetTypeTab { Fighters, SquadNets, Commander };
+
 class VariantViewerScreen : public UIScreen {
 public:
     void on_enter() override;
@@ -24,7 +27,10 @@ private:
     enum class SubView { List, TestBench };
     SubView sub_view_ = SubView::List;
 
-    // Variant list state
+    // Net type tab
+    NetTypeTab active_tab_ = NetTypeTab::Fighters;
+
+    // Variant list state (fighters)
     struct VariantScreenState {
         std::vector<SnapshotHeader> variants;
         int selected_idx = 0;
@@ -34,11 +40,19 @@ private:
     };
     VariantScreenState vs_;
     std::string last_genome_;
+
+    // Squad net state
+    std::vector<SnapshotHeader> squad_variants_;
+    int squad_selected_idx_ = 0;
+    std::string paired_fighter_name_;
+
     // Pending modal results (set by callbacks, processed in on_draw)
     bool promote_pending_ = false;
     std::string promote_name_;
     bool delete_pending_ = false;
     std::string delete_variant_name_;
+    bool squad_delete_pending_ = false;
+    std::string squad_delete_name_;
 
     // Evolution settings cache
     EvolvableFlags evo_flags_;
@@ -53,14 +67,21 @@ private:
     enum class Action {
         Stay, Back, TrainFresh, TrainFrom, ArenaFresh, ArenaFrom,
         ViewNet, TestBench, PromoteToGenome, DeleteVariant,
-        LineageTree
+        LineageTree,
+        // Squad actions
+        SquadTrainVsSquad, SquadTrainBaseAttack, SquadChangeFighter,
+        SquadViewNet, SquadDelete
     };
 
     // Internal draw helpers
     Action draw_variant_list(AppState& state, UIManager& ui);
+    void draw_tab_bar();
+    Action draw_squad_list(float content_h);
+    Action draw_squad_actions(AppState& state, UIManager& ui, float content_h);
 
     // Helper: variant file path
     [[nodiscard]] std::string variant_path(const SnapshotHeader& hdr) const;
+    [[nodiscard]] std::string squad_variant_path(const SnapshotHeader& hdr) const;
 };
 
 } // namespace neuroflyer

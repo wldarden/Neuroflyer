@@ -56,6 +56,12 @@ struct AppState {
 
     bool quit_requested = false;
 
+    // Squad training mode (set by variant viewer squad actions)
+    bool squad_training_mode = false;
+    bool base_attack_mode = false;
+    std::string squad_paired_fighter_name;
+    std::string squad_training_genome_dir;
+
     // Data invalidation flags — set by any screen that mutates data,
     // consumed by the screen that owns the cache.
     bool genomes_dirty = true;    // genome list changed (create/delete genome)

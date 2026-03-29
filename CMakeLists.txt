@@ -90,6 +90,7 @@ add_executable(neuroflyer
     src/ui/framework/modals/editor_modal.cpp
     src/ui/modals/node_editor_modal.cpp
     src/ui/modals/layer_editor_modal.cpp
+    src/ui/modals/fighter_pairing_modal.cpp
     src/ui/renderers/variant_net_render.cpp
     src/ui/views/game_view.cpp
     src/ui/views/fitness_editor.cpp
