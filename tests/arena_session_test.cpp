@@ -286,6 +286,109 @@ TEST(ArenaSessionTest, AllyKillRemoves1000Points) {
     EXPECT_LE(scores[0], -999.0f);
 }
 
+TEST(ArenaSessionTest, BasesSpawnPerTeam) {
+    nf::ArenaConfig config;
+    config.num_teams = 2;
+    config.num_squads = 1;
+    config.fighters_per_squad = 4;
+    config.tower_count = 0;
+    config.token_count = 0;
+    config.world_width = 1000.0f;
+    config.world_height = 1000.0f;
+    config.base_hp = 500.0f;
+    config.base_radius = 50.0f;
+    nf::ArenaSession arena(config, 42);
+
+    ASSERT_EQ(arena.bases().size(), 2u);
+    EXPECT_FLOAT_EQ(arena.bases()[0].max_hp, 500.0f);
+    EXPECT_FLOAT_EQ(arena.bases()[0].radius, 50.0f);
+    EXPECT_EQ(arena.bases()[0].team_id, 0);
+    EXPECT_EQ(arena.bases()[1].team_id, 1);
+    float dx = arena.bases()[0].x - arena.bases()[1].x;
+    float dy = arena.bases()[0].y - arena.bases()[1].y;
+    EXPECT_GT(dx * dx + dy * dy, 100.0f);
+}
+
+TEST(ArenaSessionTest, BulletDamagesEnemyBase) {
+    nf::ArenaConfig config;
+    config.num_teams = 2;
+    config.num_squads = 1;
+    config.fighters_per_squad = 1;
+    config.tower_count = 0;
+    config.token_count = 0;
+    config.world_width = 1000.0f;
+    config.world_height = 1000.0f;
+    config.base_hp = 100.0f;
+    config.base_radius = 50.0f;
+    config.base_bullet_damage = 10.0f;
+    nf::ArenaSession arena(config, 42);
+
+    nf::Bullet b;
+    b.x = arena.bases()[1].x;
+    b.y = arena.bases()[1].y;
+    b.alive = true;
+    b.dir_x = 0.0f;
+    b.dir_y = -1.0f;
+    b.owner_index = 0;
+    b.distance_traveled = 0.0f;
+    b.max_range = 500.0f;
+    arena.add_bullet(b);
+    arena.tick();
+
+    EXPECT_FLOAT_EQ(arena.bases()[1].hp, 90.0f);
+    EXPECT_TRUE(arena.bases()[1].alive());
+}
+
+TEST(ArenaSessionTest, BulletDoesNotDamageOwnBase) {
+    nf::ArenaConfig config;
+    config.num_teams = 2;
+    config.num_squads = 1;
+    config.fighters_per_squad = 1;
+    config.tower_count = 0;
+    config.token_count = 0;
+    config.world_width = 1000.0f;
+    config.world_height = 1000.0f;
+    config.base_hp = 100.0f;
+    config.base_radius = 50.0f;
+    config.base_bullet_damage = 10.0f;
+    nf::ArenaSession arena(config, 42);
+
+    nf::Bullet b;
+    b.x = arena.bases()[0].x;
+    b.y = arena.bases()[0].y;
+    b.alive = true;
+    b.dir_x = 0.0f;
+    b.dir_y = -1.0f;
+    b.owner_index = 0;
+    b.distance_traveled = 0.0f;
+    b.max_range = 500.0f;
+    arena.add_bullet(b);
+    arena.tick();
+
+    EXPECT_FLOAT_EQ(arena.bases()[0].hp, 100.0f);
+}
+
+TEST(ArenaSessionTest, BaseDestroyedEndsRound) {
+    nf::ArenaConfig config;
+    config.num_teams = 2;
+    config.num_squads = 1;
+    config.fighters_per_squad = 1;
+    config.tower_count = 0;
+    config.token_count = 0;
+    config.world_width = 1000.0f;
+    config.world_height = 1000.0f;
+    config.base_hp = 10.0f;
+    config.base_radius = 50.0f;
+    config.base_bullet_damage = 10.0f;
+    config.time_limit_ticks = 10000;
+    nf::ArenaSession arena(config, 42);
+
+    arena.bases()[1].take_damage(10.0f);
+    ASSERT_FALSE(arena.bases()[1].alive());
+    arena.tick();
+    EXPECT_TRUE(arena.is_over());
+}
+
 TEST(ArenaConfigTest, PopulationFromSquads) {
     nf::ArenaConfig config;
     config.num_teams = 2;

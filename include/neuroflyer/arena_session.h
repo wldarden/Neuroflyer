@@ -1,6 +1,7 @@
 #pragma once
 
 #include <neuroflyer/arena_config.h>
+#include <neuroflyer/base.h>
 #include <neuroflyer/game.h>
 
 #include <cstdint>
@@ -34,14 +35,19 @@ public:
     [[nodiscard]] const std::vector<Tower>& towers() const noexcept { return towers_; }
     [[nodiscard]] const std::vector<Token>& tokens() const noexcept { return tokens_; }
     [[nodiscard]] const std::vector<Bullet>& bullets() const noexcept { return bullets_; }
+    [[nodiscard]] const std::vector<Base>& bases() const noexcept { return bases_; }
+    [[nodiscard]] std::vector<Base>& bases() noexcept { return bases_; }
+    [[nodiscard]] const std::vector<int>& tokens_collected() const noexcept { return tokens_collected_; }
     [[nodiscard]] const ArenaConfig& config() const noexcept { return config_; }
 
 private:
     void spawn_ships();
+    void spawn_bases();
     void spawn_obstacles();
     void spawn_bullets_from_ships();
     void update_bullets();
     void resolve_bullet_tower_collisions();
+    void resolve_bullet_base_collisions();
     void resolve_ship_tower_collisions();
     void resolve_ship_token_collisions();
     void check_end_conditions();
@@ -51,8 +57,10 @@ private:
     std::vector<Tower> towers_;
     std::vector<Token> tokens_;
     std::vector<Bullet> bullets_;
+    std::vector<Base> bases_;
     std::vector<int> team_assignments_;
     std::vector<float> survival_ticks_;
+    std::vector<int> tokens_collected_;
     std::vector<int> enemy_kills_;
     std::vector<int> ally_kills_;
     std::mt19937 rng_;

@@ -19,10 +19,12 @@ ArenaSession::ArenaSession(const ArenaConfig& config, uint32_t seed)
     }
 
     survival_ticks_.resize(pop, 0.0f);
+    tokens_collected_.resize(pop, 0);
     enemy_kills_.resize(pop, 0);
     ally_kills_.resize(pop, 0);
 
     spawn_ships();
+    spawn_bases();
     spawn_obstacles();
 }
 
@@ -59,6 +61,21 @@ void ArenaSession::spawn_ships() {
         ship.rotation = std::atan2(to_center_x, -to_center_y);
 
         ships_.push_back(ship);
+    }
+}
+
+void ArenaSession::spawn_bases() {
+    float center_x = config_.world_width / 2.0f;
+    float center_y = config_.world_height / 2.0f;
+    float radius = std::min(config_.world_width, config_.world_height) / 2.0f;
+    float base_ring = radius * 0.5f;  // bases at 50% of arena radius
+    float slice_angle = 2.0f * static_cast<float>(M_PI) / static_cast<float>(config_.num_teams);
+
+    for (std::size_t t = 0; t < config_.num_teams; ++t) {
+        float angle = static_cast<float>(t) * slice_angle + slice_angle / 2.0f;
+        float bx = center_x + base_ring * std::cos(angle);
+        float by = center_y + base_ring * std::sin(angle);
+        bases_.emplace_back(bx, by, config_.base_radius, config_.base_hp, static_cast<int>(t));
     }
 }
 
@@ -107,34 +124,37 @@ void ArenaSession::tick() {
     // 5. Resolve bullet-ship collisions
     resolve_bullet_ship_collisions();
 
-    // 6. Resolve bullet-tower collisions
+    // 6. Resolve bullet-base collisions
+    resolve_bullet_base_collisions();
+
+    // 7. Resolve bullet-tower collisions
     resolve_bullet_tower_collisions();
 
-    // 7. Resolve ship-tower collisions
+    // 8. Resolve ship-tower collisions
     resolve_ship_tower_collisions();
 
-    // 8. Resolve ship-token collisions
+    // 9. Resolve ship-token collisions
     resolve_ship_token_collisions();
 
-    // 9. Increment survival ticks for alive ships
+    // 10. Increment survival ticks for alive ships
     for (std::size_t i = 0; i < ships_.size(); ++i) {
         if (ships_[i].alive) {
             survival_ticks_[i] += 1.0f;
         }
     }
 
-    // 10. Decrement shoot cooldowns
+    // 11. Decrement shoot cooldowns
     for (auto& ship : ships_) {
         if (ship.shoot_cooldown > 0) --ship.shoot_cooldown;
     }
 
-    // 11. Clean up dead bullets
+    // 12. Clean up dead bullets
     std::erase_if(bullets_, [](const Bullet& b) { return !b.alive; });
 
-    // 12. Increment tick count
+    // 13. Increment tick count
     ++tick_count_;
 
-    // 13. Check end conditions
+    // 14. Check end conditions
     check_end_conditions();
 }
 
@@ -250,6 +270,25 @@ void ArenaSession::resolve_bullet_tower_collisions() {
     }
 }
 
+void ArenaSession::resolve_bullet_base_collisions() {
+    for (auto& b : bullets_) {
+        if (!b.alive) continue;
+        for (auto& base : bases_) {
+            if (!base.alive()) continue;
+            // Skip friendly bullets
+            if (b.owner_index >= 0) {
+                int shooter_team = team_assignments_[static_cast<std::size_t>(b.owner_index)];
+                if (shooter_team == base.team_id) continue;
+            }
+            if (bullet_circle_collision(b.x, b.y, base.x, base.y, base.radius)) {
+                base.take_damage(config_.base_bullet_damage);
+                b.alive = false;
+                break;
+            }
+        }
+    }
+}
+
 void ArenaSession::resolve_ship_tower_collisions() {
     for (auto& ship : ships_) {
         if (!ship.alive) continue;
@@ -264,16 +303,17 @@ void ArenaSession::resolve_ship_tower_collisions() {
 }
 
 void ArenaSession::resolve_ship_token_collisions() {
-    for (auto& ship : ships_) {
-        if (!ship.alive) continue;
+    for (std::size_t i = 0; i < ships_.size(); ++i) {
+        if (!ships_[i].alive) continue;
         for (auto& tok : tokens_) {
             if (!tok.alive) continue;
-            float dx = ship.x - tok.x;
-            float dy = ship.y - tok.y;
+            float dx = ships_[i].x - tok.x;
+            float dy = ships_[i].y - tok.y;
             float dist_sq = dx * dx + dy * dy;
             float hit_r = tok.radius + Triangle::SIZE;
             if (dist_sq < hit_r * hit_r) {
                 tok.alive = false;
+                tokens_collected_[i]++;
             }
         }
     }
@@ -327,13 +367,22 @@ std::size_t ArenaSession::teams_alive() const {
 }
 
 void ArenaSession::check_end_conditions() {
-    // Time limit reached
     if (tick_count_ >= config_.time_limit_ticks) {
         over_ = true;
         return;
     }
 
-    // Only 1 or 0 teams alive
+    // Count teams with alive bases
+    std::size_t bases_alive = 0;
+    for (const auto& base : bases_) {
+        if (base.alive()) ++bases_alive;
+    }
+    if (bases_alive <= 1) {
+        over_ = true;
+        return;
+    }
+
+    // Also end if only 1 or 0 teams have alive ships
     if (teams_alive() <= 1) {
         over_ = true;
     }
