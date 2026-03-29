@@ -28,8 +28,13 @@ bool draw_arena_config_view(ArenaConfig& config) {
     }
 
     int fighters_per_squad = static_cast<int>(config.fighters_per_squad);
-    if (ui::input_int("Fighters per Squad", &fighters_per_squad, 1, 50)) {
+    if (ui::input_int("Fighters per Squad", &fighters_per_squad, 4, 32)) {
         config.fighters_per_squad = static_cast<std::size_t>(fighters_per_squad);
+    }
+
+    int squad_broadcast_signals = static_cast<int>(config.squad_broadcast_signals);
+    if (ui::input_int("Squad Broadcast Signals", &squad_broadcast_signals, 2, 8)) {
+        config.squad_broadcast_signals = static_cast<std::size_t>(squad_broadcast_signals);
     }
 
     ImGui::TextDisabled("Population: %zu ships",
@@ -91,6 +96,23 @@ bool draw_arena_config_view(ArenaConfig& config) {
 
     ui::slider_float("Bullet Max Range", &config.bullet_max_range, 100.0f, 5000.0f);
     ui::slider_float("Rotation Speed", &config.rotation_speed, 0.01f, 0.2f);
+    ImGui::Spacing();
+
+    // --- Base ---
+    ui::section_header("Base");
+
+    ui::slider_float("Base HP", &config.base_hp, 100.0f, 5000.0f);
+    ui::slider_float("Base Radius", &config.base_radius, 50.0f, 200.0f);
+    ui::slider_float("Base Bullet Damage", &config.base_bullet_damage, 1.0f, 100.0f);
+    ImGui::Spacing();
+
+    // --- Fitness Weights ---
+    ui::section_header("Fitness Weights");
+
+    ui::slider_float("Base Damage Weight", &config.fitness_weight_base_damage, 0.0f, 2.0f);
+    ui::slider_float("Survival Weight", &config.fitness_weight_survival, 0.0f, 2.0f);
+    ui::slider_float("Ships Alive Weight", &config.fitness_weight_ships_alive, 0.0f, 2.0f);
+    ui::slider_float("Tokens Weight", &config.fitness_weight_tokens, 0.0f, 2.0f);
     ImGui::Spacing();
 
     // --- Buttons ---
