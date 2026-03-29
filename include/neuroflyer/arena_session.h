@@ -10,6 +10,14 @@
 
 namespace neuroflyer {
 
+struct SquadStats {
+    float alive_fraction = 0.0f;
+    float centroid_x = 0.0f, centroid_y = 0.0f;
+    float avg_dist_to_home = 0.0f;
+    float avg_dist_to_enemy_base = 0.0f;
+    float centroid_dir_sin = 0.0f, centroid_dir_cos = 0.0f;  // relative to home base
+};
+
 class ArenaSession {
 public:
     ArenaSession(const ArenaConfig& config, uint32_t seed);
@@ -24,6 +32,8 @@ public:
     [[nodiscard]] bool is_over() const noexcept;
     [[nodiscard]] uint32_t current_tick() const noexcept { return tick_count_; }
     [[nodiscard]] int team_of(std::size_t ship_idx) const noexcept;
+    [[nodiscard]] int squad_of(std::size_t ship_idx) const noexcept;
+    [[nodiscard]] SquadStats compute_squad_stats(int team, int squad) const;
     [[nodiscard]] std::vector<float> get_scores() const;
     [[nodiscard]] std::size_t alive_count() const noexcept;
     [[nodiscard]] std::size_t teams_alive() const;
@@ -59,6 +69,7 @@ private:
     std::vector<Bullet> bullets_;
     std::vector<Base> bases_;
     std::vector<int> team_assignments_;
+    std::vector<int> squad_assignments_;
     std::vector<float> survival_ticks_;
     std::vector<int> tokens_collected_;
     std::vector<int> enemy_kills_;

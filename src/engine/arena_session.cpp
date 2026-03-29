@@ -18,6 +18,12 @@ ArenaSession::ArenaSession(const ArenaConfig& config, uint32_t seed)
         team_assignments_[i] = static_cast<int>(i / ships_per_team);
     }
 
+    squad_assignments_.resize(pop);
+    for (std::size_t i = 0; i < pop; ++i) {
+        std::size_t within_team = i % (config.num_squads * config.fighters_per_squad);
+        squad_assignments_[i] = static_cast<int>(within_team / config.fighters_per_squad);
+    }
+
     survival_ticks_.resize(pop, 0.0f);
     tokens_collected_.resize(pop, 0);
     enemy_kills_.resize(pop, 0);
@@ -332,6 +338,62 @@ int ArenaSession::team_of(std::size_t ship_idx) const noexcept {
         return team_assignments_[ship_idx];
     }
     return -1;
+}
+
+int ArenaSession::squad_of(std::size_t ship_idx) const noexcept {
+    if (ship_idx < squad_assignments_.size()) {
+        return squad_assignments_[ship_idx];
+    }
+    return -1;
+}
+
+SquadStats ArenaSession::compute_squad_stats(int team, int squad) const {
+    SquadStats stats;
+    float count = 0, alive_count = 0;
+    float sum_x = 0, sum_y = 0;
+
+    for (std::size_t i = 0; i < ships_.size(); ++i) {
+        if (team_assignments_[i] != team || squad_assignments_[i] != squad) continue;
+        count += 1.0f;
+        if (!ships_[i].alive) continue;
+        alive_count += 1.0f;
+        sum_x += ships_[i].x;
+        sum_y += ships_[i].y;
+    }
+
+    if (count == 0.0f) return stats;
+    stats.alive_fraction = alive_count / count;
+
+    if (alive_count > 0.0f) {
+        stats.centroid_x = sum_x / alive_count;
+        stats.centroid_y = sum_y / alive_count;
+
+        auto t = static_cast<std::size_t>(team);
+        if (t < bases_.size()) {
+            float dx_home = stats.centroid_x - bases_[t].x;
+            float dy_home = stats.centroid_y - bases_[t].y;
+            float dist_home = std::sqrt(dx_home * dx_home + dy_home * dy_home);
+            float diag = std::sqrt(config_.world_width * config_.world_width +
+                                    config_.world_height * config_.world_height);
+            stats.avg_dist_to_home = dist_home / diag;
+            if (dist_home > 0.0f) {
+                stats.centroid_dir_sin = dx_home / dist_home;
+                stats.centroid_dir_cos = dy_home / dist_home;
+            }
+
+            float min_enemy_dist = diag;
+            for (const auto& base : bases_) {
+                if (base.team_id == team) continue;
+                float dx_e = stats.centroid_x - base.x;
+                float dy_e = stats.centroid_y - base.y;
+                min_enemy_dist = std::min(min_enemy_dist,
+                    std::sqrt(dx_e * dx_e + dy_e * dy_e));
+            }
+            stats.avg_dist_to_enemy_base = min_enemy_dist / diag;
+        }
+    }
+
+    return stats;
 }
 
 std::vector<float> ArenaSession::get_scores() const {

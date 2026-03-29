@@ -396,3 +396,47 @@ TEST(ArenaConfigTest, PopulationFromSquads) {
     config.fighters_per_squad = 4;
     EXPECT_EQ(config.population_size(), 16u);
 }
+
+TEST(ArenaSessionTest, SquadAssignment) {
+    nf::ArenaConfig config;
+    config.num_teams = 2;
+    config.num_squads = 2;
+    config.fighters_per_squad = 3;
+    config.tower_count = 0;
+    config.token_count = 0;
+    config.world_width = 1000.0f;
+    config.world_height = 1000.0f;
+    nf::ArenaSession arena(config, 42);
+
+    EXPECT_EQ(arena.ships().size(), 12u);
+    EXPECT_EQ(arena.squad_of(0), 0);   // team 0, squad 0
+    EXPECT_EQ(arena.squad_of(2), 0);   // team 0, squad 0
+    EXPECT_EQ(arena.squad_of(3), 1);   // team 0, squad 1
+    EXPECT_EQ(arena.squad_of(5), 1);   // team 0, squad 1
+    EXPECT_EQ(arena.squad_of(6), 0);   // team 1, squad 0
+    EXPECT_EQ(arena.squad_of(9), 1);   // team 1, squad 1
+}
+
+TEST(ArenaSessionTest, SquadStats) {
+    nf::ArenaConfig config;
+    config.num_teams = 2;
+    config.num_squads = 1;
+    config.fighters_per_squad = 4;
+    config.tower_count = 0;
+    config.token_count = 0;
+    config.world_width = 1000.0f;
+    config.world_height = 1000.0f;
+    config.base_hp = 100.0f;
+    nf::ArenaSession arena(config, 42);
+
+    auto stats = arena.compute_squad_stats(0, 0);
+    EXPECT_FLOAT_EQ(stats.alive_fraction, 1.0f);
+    EXPECT_GT(stats.centroid_x, 0.0f);
+    EXPECT_GT(stats.centroid_y, 0.0f);
+
+    // Kill 2 of 4 fighters
+    arena.ships()[0].alive = false;
+    arena.ships()[1].alive = false;
+    stats = arena.compute_squad_stats(0, 0);
+    EXPECT_FLOAT_EQ(stats.alive_fraction, 0.5f);
+}
