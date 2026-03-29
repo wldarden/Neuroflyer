@@ -97,4 +97,45 @@ std::vector<TeamIndividual> evolve_team_population(
     return next;
 }
 
+std::vector<TeamIndividual> evolve_squad_only(
+    std::vector<TeamIndividual>& population,
+    const EvolutionConfig& config,
+    std::mt19937& rng) {
+
+    std::sort(population.begin(), population.end(),
+              [](const auto& a, const auto& b) { return a.fitness > b.fitness; });
+
+    std::vector<TeamIndividual> next;
+    next.reserve(population.size());
+
+    // Elitism
+    for (std::size_t i = 0; i < std::min(config.elitism_count, population.size()); ++i) {
+        next.push_back(population[i]);
+        next.back().fitness = 0.0f;
+    }
+
+    // Tournament selection + squad-only mutation
+    std::uniform_int_distribution<std::size_t> dist(0, population.size() - 1);
+    while (next.size() < population.size()) {
+        std::size_t best = dist(rng);
+        for (std::size_t t = 1; t < config.tournament_size; ++t) {
+            std::size_t candidate = dist(rng);
+            if (population[candidate].fitness > population[best].fitness) {
+                best = candidate;
+            }
+        }
+
+        TeamIndividual child = population[best];
+        child.fitness = 0.0f;
+
+        // Only mutate squad net — fighter stays frozen
+        apply_mutations(child.squad_individual, config, rng);
+        // DO NOT call apply_mutations on child.fighter_individual
+
+        next.push_back(std::move(child));
+    }
+
+    return next;
+}
+
 } // namespace neuroflyer

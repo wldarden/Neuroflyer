@@ -46,4 +46,11 @@ struct TeamIndividual {
     const EvolutionConfig& config,
     std::mt19937& rng);
 
+/// Evolve only squad nets — fighter weights are frozen (not mutated).
+/// Used for squad-specific training with a fixed fighter variant.
+[[nodiscard]] std::vector<TeamIndividual> evolve_squad_only(
+    std::vector<TeamIndividual>& population,
+    const EvolutionConfig& config,
+    std::mt19937& rng);
+
 } // namespace neuroflyer
