@@ -586,6 +586,31 @@ void delete_autosave(const std::string& genome_dir) {
     }
 }
 
+// ==================== Squad variant operations ====================
+
+std::vector<SnapshotHeader> list_squad_variants(const std::string& genome_dir) {
+    std::string squad_dir = genome_dir + "/squad";
+    if (!fs::exists(squad_dir)) return {};
+    // Reuse list_variants on the squad subdir — it scans for .bin files and reads headers
+    return list_variants(squad_dir);
+}
+
+void save_squad_variant(const std::string& genome_dir, const Snapshot& variant) {
+    std::string squad_dir = genome_dir + "/squad";
+    fs::create_directories(squad_dir);
+    std::string path = squad_dir + "/" + variant.name + ".bin";
+    save_snapshot(variant, path);
+    rebuild_lineage(squad_dir);
+}
+
+void delete_squad_variant(const std::string& genome_dir, const std::string& variant_name) {
+    std::string squad_dir = genome_dir + "/squad";
+    std::string path = squad_dir + "/" + variant_name + ".bin";
+    if (fs::exists(path)) {
+        fs::remove(path);
+    }
+}
+
 void save_elite_variants_with_mrca(
     const std::string& genome_dir,
     const std::string& training_parent,

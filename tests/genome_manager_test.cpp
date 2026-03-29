@@ -503,3 +503,55 @@ TEST_F(GenomeManagerTest, ListVariants_SkipsAutosave) {
         EXPECT_NE(v.name, "~autosave") << "Autosave should not appear in variant list";
     }
 }
+
+// ==================== Squad variant tests ====================
+
+TEST_F(GenomeManagerTest, ListSquadVariantsEmptyDir) {
+    // genome_dir() points to a non-existent path; list_squad_variants on a dir
+    // with no squad/ subdir should return empty
+    auto genome = make_snapshot("TestGenome", "", 0);
+    nf::create_genome(genomes_dir(), genome);
+
+    auto variants = nf::list_squad_variants(genome_dir());
+    EXPECT_TRUE(variants.empty());
+}
+
+TEST_F(GenomeManagerTest, SaveAndListSquadVariant) {
+    auto genome = make_snapshot("TestGenome", "", 0);
+    nf::create_genome(genomes_dir(), genome);
+
+    nf::Snapshot snap;
+    snap.name = "squad-v1";
+    snap.generation = 10;
+    snap.paired_fighter_name = "elite-fighter";
+    snap.ship_design.memory_slots = 2;
+    snap.topology.input_size = 8;
+    snap.topology.layers = {{std::size_t{4}, neuralnet::Activation::Tanh, {}}};
+    snap.weights = {0.1f, 0.2f};
+
+    nf::save_squad_variant(genome_dir(), snap);
+
+    auto variants = nf::list_squad_variants(genome_dir());
+    ASSERT_EQ(variants.size(), 1u);
+    EXPECT_EQ(variants[0].name, "squad-v1");
+    EXPECT_EQ(variants[0].paired_fighter_name, "elite-fighter");
+}
+
+TEST_F(GenomeManagerTest, DeleteSquadVariant) {
+    auto genome = make_snapshot("TestGenome", "", 0);
+    nf::create_genome(genomes_dir(), genome);
+
+    nf::Snapshot snap;
+    snap.name = "squad-to-delete";
+    snap.generation = 5;
+    snap.ship_design.memory_slots = 2;
+    snap.topology.input_size = 4;
+    snap.topology.layers = {{std::size_t{2}, neuralnet::Activation::Tanh, {}}};
+    snap.weights = {0.5f};
+
+    nf::save_squad_variant(genome_dir(), snap);
+    ASSERT_EQ(nf::list_squad_variants(genome_dir()).size(), 1u);
+
+    nf::delete_squad_variant(genome_dir(), "squad-to-delete");
+    EXPECT_TRUE(nf::list_squad_variants(genome_dir()).empty());
+}

@@ -74,6 +74,17 @@ void write_autosave(const std::string& genome_dir, const Snapshot& snapshot);
 /// Delete the auto-save file if it exists. Called on clean exit from training.
 void delete_autosave(const std::string& genome_dir);
 
+// ==================== Squad variant operations ====================
+
+/// List squad net variants from {genome_dir}/squad/
+[[nodiscard]] std::vector<SnapshotHeader> list_squad_variants(const std::string& genome_dir);
+
+/// Save a squad net variant to {genome_dir}/squad/{name}.bin
+void save_squad_variant(const std::string& genome_dir, const Snapshot& variant);
+
+/// Delete a squad net variant from {genome_dir}/squad/
+void delete_squad_variant(const std::string& genome_dir, const std::string& variant_name);
+
 /// Save multiple elite variants with MRCA lineage stubs.
 /// Computes the MRCA tree from the tracker, creates MRCA stub entries in
 /// lineage.json, and saves each variant .bin with the correct parent.
