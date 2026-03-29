@@ -75,6 +75,7 @@ add_executable(neuroflyer
     src/engine/mrca_tracker.cpp
     src/engine/ray.cpp
     src/engine/sensor_engine.cpp
+    src/engine/arena_sensor.cpp
     src/engine/paths.cpp
 
     # UI — SDL/ImGui rendering and interaction
