@@ -13,6 +13,7 @@ struct Snapshot {
     int64_t created_timestamp = 0;
     std::string parent_name;
     uint32_t run_count = 0;  // how many training runs have used this variant as seed
+    std::string paired_fighter_name;  // v6: fighter variant this squad net was trained with (empty for fighter snapshots)
 
     ShipDesign ship_design;
     neuralnet::NetworkTopology topology;
@@ -25,6 +26,7 @@ struct SnapshotHeader {
     int64_t created_timestamp = 0;
     std::string parent_name;
     uint32_t run_count = 0;
+    std::string paired_fighter_name;  // v6: fighter variant this squad net was trained with (empty for fighter snapshots)
 };
 
 struct GenomeInfo {

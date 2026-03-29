@@ -178,3 +178,64 @@ TEST(SnapshotIOTest, V2Backfill_SensorsGetIds) {
         EXPECT_NE(s.id, 0u);
     }
 }
+
+TEST(SnapshotIOTest, V6PairedFighterName) {
+    nf::Snapshot snap;
+    snap.name = "squad-v1";
+    snap.generation = 50;
+    snap.created_timestamp = 1234567890;
+    snap.parent_name = "squad-root";
+    snap.run_count = 3;
+    snap.paired_fighter_name = "elite-fighter-v3";
+    snap.ship_design.memory_slots = 4;
+    snap.topology.input_size = 8;
+    snap.topology.layers = {{4, neuralnet::Activation::Tanh, {}}, {4, neuralnet::Activation::Tanh, {}}};
+    snap.weights = {0.1f, 0.2f, 0.3f};
+
+    std::ostringstream out;
+    nf::save_snapshot(snap, out);
+
+    std::istringstream in(out.str());
+    auto loaded = nf::load_snapshot(in);
+
+    EXPECT_EQ(loaded.name, "squad-v1");
+    EXPECT_EQ(loaded.paired_fighter_name, "elite-fighter-v3");
+    EXPECT_EQ(loaded.run_count, 3u);
+}
+
+TEST(SnapshotIOTest, V6HeaderPairedFighterName) {
+    nf::Snapshot snap;
+    snap.name = "squad-v2";
+    snap.generation = 10;
+    snap.paired_fighter_name = "my-fighter";
+    snap.ship_design.memory_slots = 2;
+    snap.topology.input_size = 4;
+    snap.topology.layers = {{2, neuralnet::Activation::Tanh, {}}};
+    snap.weights = {0.5f};
+
+    std::ostringstream out;
+    nf::save_snapshot(snap, out);
+
+    std::istringstream in(out.str());
+    auto hdr = nf::read_snapshot_header(in);
+
+    EXPECT_EQ(hdr.name, "squad-v2");
+    EXPECT_EQ(hdr.paired_fighter_name, "my-fighter");
+}
+
+TEST(SnapshotIOTest, V6EmptyPairedFighterForFighterSnapshot) {
+    nf::Snapshot snap;
+    snap.name = "regular-variant";
+    snap.generation = 5;
+    snap.ship_design.memory_slots = 4;
+    snap.topology.input_size = 8;
+    snap.topology.layers = {{4, neuralnet::Activation::Tanh, {}}};
+    snap.weights = {0.1f};
+    // paired_fighter_name left empty (default)
+
+    std::ostringstream out;
+    nf::save_snapshot(snap, out);
+    std::istringstream in(out.str());
+    auto loaded = nf::load_snapshot(in);
+    EXPECT_TRUE(loaded.paired_fighter_name.empty());
+}
