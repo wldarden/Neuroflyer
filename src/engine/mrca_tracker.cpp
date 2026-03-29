@@ -4,7 +4,6 @@
 #include <cassert>
 #include <functional>
 #include <limits>
-#include <numeric>
 #include <unordered_set>
 
 namespace neuroflyer {
@@ -53,21 +52,30 @@ void MrcaTracker::record_generation(
                        ship_designs.size(),
                        weights.size()});
 
+    std::unordered_map<uint32_t, uint32_t> hash_to_eid;
+
     for (std::size_t i = 0; i < n; ++i) {
         if (elite_ids[i] != last_elite_ids_[i]) {
-            // New occupant — create entry
-            uint32_t eid = next_entry_id_++;
-            MrcaEntry entry;
-            entry.level = MrcaEntry::Level::Full;
-            entry.generation = generation;
-            entry.individual_id = elite_ids[i];
-            entry.topology = topologies[i];
-            entry.ship_design = ship_designs[i];
-            entry.weights = weights[i];
+            auto it = hash_to_eid.find(elite_ids[i]);
+            if (it != hash_to_eid.end()) {
+                // Another slot already created an entry for this individual
+                chains_[i].ancestor_ids.push_back(it->second);
+            } else {
+                // New occupant — create entry
+                uint32_t eid = next_entry_id_++;
+                MrcaEntry entry;
+                entry.level = MrcaEntry::Level::Full;
+                entry.generation = generation;
+                entry.individual_id = elite_ids[i];
+                entry.topology = topologies[i];
+                entry.ship_design = ship_designs[i];
+                entry.weights = weights[i];
 
-            current_memory_ += entry.memory_bytes();
-            entries_.emplace(eid, std::move(entry));
-            chains_[i].ancestor_ids.push_back(eid);
+                current_memory_ += entry.memory_bytes();
+                entries_.emplace(eid, std::move(entry));
+                chains_[i].ancestor_ids.push_back(eid);
+                hash_to_eid[elite_ids[i]] = eid;
+            }
             last_elite_ids_[i] = elite_ids[i];
         } else {
             // Same occupant — reuse last entry ID

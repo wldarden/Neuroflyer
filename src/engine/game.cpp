@@ -77,7 +77,10 @@ GameSession::GameSession(uint32_t level_seed, float screen_w, float screen_h,
     triangle_.speed = config.ship_speed;
     triangle_.fire_cooldown = config.fire_cooldown;
 
-    next_tower_y_ = 50.0f;
+    // Start towers in the top half of the screen so the ship has room to breathe.
+    // Ship spawns at screen_h*0.8; tower screen_y = screen_h - tower_y.
+    // tower_y >= screen_h*0.5 puts the first towers at or above the midpoint.
+    next_tower_y_ = screen_h * 0.5f;
     next_token_y_ = 100.0f;
     maybe_spawn_towers();
     maybe_spawn_tokens();

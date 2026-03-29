@@ -108,21 +108,10 @@ TEST(MrcaTracker, Prune_DropsUnreferencedEntries) {
     // Entry for ID=2 is only in chain 1 -> TopologyOnly.
     // Entry for ID=3 is only in chain 0 -> TopologyOnly.
     // Entry for ID=4 is only in chain 1 -> TopologyOnly.
-    // Entry for ID=5 is shared by both chains -> stays Full.
-    // Note: ID=5 created a single entry used by both chains (same entry_id
-    // reused because elite_ids match). Actually, each slot creates its own
-    // entry because slots are compared independently.
-
-    // The shared entry for individual_id=5 is in chain 0 and chain 1 but they
-    // have different entry IDs (created separately). So *no* entry appears in
-    // 2 chains unless the entry_id is the same. Let me verify: elite 0 changes
-    // from 3 to 5 (new entry_id X), elite 1 changes from 4 to 5 (new entry_id Y).
-    // Both have individual_id=5 but different entry_ids. So both are in only 1 chain.
-    // All entries should be degraded.
-
-    // With 5 unique entries (gen0: 2 entries, gen1: 2 entries, gen2: 2 entries = 6 total),
-    // none referenced by >1 chain, all should be degraded.
-    EXPECT_EQ(tracker.full_entry_count(), 0u);
+    // Entry for ID=5 is shared by both chains (same entry_id reused
+    // because both slots have the same individual hash) -> stays Full.
+    EXPECT_EQ(tracker.entry_count(), 5u);
+    EXPECT_EQ(tracker.full_entry_count(), 1u);
 }
 
 // ---------------------------------------------------------------------------
@@ -132,56 +121,22 @@ TEST(MrcaTracker, Prune_DropsUnreferencedEntries) {
 TEST(MrcaTracker, MrcaComputation_SimpleCase) {
     nf::MrcaTracker tracker(2, 1024 * 1024, 100);
 
-    // Gen 0-4: both elites share same individual ID=1.
-    // But each slot creates its own entry only on first record (gen 0).
-    // Wait — if both slots have elite_id=1, they each compare against
-    // last_elite_ids_ (initialized to MAX). So at gen 0, both slots create
-    // new entries. Then at gen 1, both match their last (still ID=1), so
-    // they reuse. But the entry_ids are different for slot 0 and slot 1.
-    //
-    // For MRCA to work, both chains need to share the SAME entry_id.
-    // Let me use a setup where they actually share an entry:
-    //
-    // Actually, the current design creates a separate entry per slot even
-    // for the same individual_id. The MRCA algorithm compares entry_ids,
-    // so two different entry_ids for the same individual_id won't match.
-    //
-    // To test MRCA properly, I'll use a different approach: have them share
-    // the same chain prefix by having them start from the same slot.
-    //
-    // Actually re-reading the spec: "Only stores a new entry when an elite
-    // slot's individual_id changes." Each slot tracks independently.
-    //
-    // The MRCA computation checks chain_a[g] == chain_b[g]. For two slots
-    // that have different entry_ids at gen 0 (even if same individual_id),
-    // they won't match. This means the spec's MRCA only works when entries
-    // are literally the same entry_id.
-    //
-    // For the test, I need to ensure the chains share a common prefix of
-    // entry_ids. That happens when one slot is assigned the same entry
-    // created by another slot. But the current implementation creates
-    // separate entries per slot.
-    //
-    // Let me re-think: perhaps the MRCA should compare individual_id, not
-    // entry_id. But the spec says entry_id in the chain...
-    //
-    // For testing purposes, let me just verify the tree structure when there
-    // is no common ancestor (they diverge from the start).
-
-    // Setup: gen 0-4 both elites have individual_id=1 (but separate entries).
+    // Gen 0-4: both elites share individual ID=1. Same hash → shared entry.
     for (uint32_t g = 0; g < 5; ++g) {
         record(tracker, g, {1, 1});
     }
     // Gen 5: elite 0 becomes ID=2, elite 1 becomes ID=3.
     record(tracker, 5, {2, 3});
 
-    // Since both chains start with different entry_ids for the same
-    // individual_id=1, the chains never share an entry_id.
-    // The MRCA tree should still produce a valid tree.
+    // Only 1 shared entry for ID=1, plus 2 entries for the diverged IDs.
+    EXPECT_EQ(tracker.entry_count(), 3u);
+
     auto tree = tracker.compute_mrca_tree({0, 1});
     ASSERT_FALSE(tree.empty());
 
-    // Find the root (parent_index == SIZE_MAX).
+    // Tree: MRCA root (shared ancestor) + 2 leaves = 3 nodes.
+    EXPECT_EQ(tree.size(), 3u);
+
     std::size_t root_idx = SIZE_MAX;
     for (std::size_t i = 0; i < tree.size(); ++i) {
         if (tree[i].parent_index == SIZE_MAX) {
@@ -190,56 +145,35 @@ TEST(MrcaTracker, MrcaComputation_SimpleCase) {
         }
     }
     ASSERT_NE(root_idx, SIZE_MAX);
-
-    // Root should have 2 children (the two elite slots).
     EXPECT_EQ(tree[root_idx].children.size(), 2u);
+
+    // The MRCA should be the shared ancestor (individual_id=1).
+    EXPECT_EQ(tree[root_idx].entry.individual_id, 1u);
 }
 
 // ---------------------------------------------------------------------------
 // MrcaComputation_SharedAncestor
 // ---------------------------------------------------------------------------
 
-TEST(MrcaTracker, MrcaComputation_SharedAncestor) {
-    // To get a true shared ancestor, we need two chains that share the SAME
-    // entry_id at some point. This happens when:
-    // - At gen 0, elite slot 0 creates entry_id=0 for individual 1.
-    // - At gen 0, elite slot 1 creates entry_id=1 for individual 1.
-    // These are different entry_ids, so no sharing.
-    //
-    // Alternative design: build tracker with E=1, then manually test.
-    // Actually, sharing occurs when a new generation reuses an existing
-    // entry from a previous gen without change. But each slot maintains
-    // its own chain, and reuses its OWN last entry.
-    //
-    // The real use case is: two elite slots are occupied by the SAME individual
-    // at the SAME time, and they were seeded from the SAME entry.
-    // This doesn't happen with the current implementation since each slot
-    // creates its own entry.
-    //
-    // I think the intent is that compute_mrca_tree should compare by
-    // individual_id on the entries, not by entry_id. Let me adjust the test
-    // to verify the tree structure regardless.
-
+TEST(MrcaTracker, MrcaComputation_NoSharedAncestor) {
     nf::MrcaTracker tracker(2, 1024 * 1024, 100);
 
-    // Gen 0-2: both elites have different IDs (no shared ancestor).
+    // Elites always have different IDs — no shared ancestor possible.
     record(tracker, 0, {1, 2});
     record(tracker, 1, {1, 2});
     record(tracker, 2, {1, 2});
-    // Gen 3: elite 0 stays ID=1, elite 1 changes to ID=3.
     record(tracker, 3, {1, 3});
 
     auto tree = tracker.compute_mrca_tree({0, 1});
     ASSERT_FALSE(tree.empty());
 
-    // Tree should have 3 nodes: root MRCA + 2 leaves.
-    // (Even without shared entry_ids, the algorithm produces a tree.)
-    // Verify it's a valid tree structure.
+    // No shared entry IDs → synthetic root + 2 flat children.
     std::size_t root_count = 0;
     for (const auto& node : tree) {
         if (node.parent_index == SIZE_MAX) ++root_count;
     }
     EXPECT_EQ(root_count, 1u);
+    EXPECT_EQ(tree.size(), 3u);
 }
 
 // ---------------------------------------------------------------------------
@@ -249,7 +183,7 @@ TEST(MrcaTracker, MrcaComputation_SharedAncestor) {
 TEST(MrcaTracker, MrcaComputation_ThreeWay) {
     nf::MrcaTracker tracker(3, 1024 * 1024, 100);
 
-    // Gen 0-1: all three elites share individual ID=1 (separate entries).
+    // Gen 0-1: all three elites share individual ID=1 (shared entry).
     record(tracker, 0, {1, 1, 1});
     record(tracker, 1, {1, 1, 1});
     // Gen 2: elite 2 diverges to ID=4.
@@ -263,8 +197,6 @@ TEST(MrcaTracker, MrcaComputation_ThreeWay) {
     auto tree = tracker.compute_mrca_tree({0, 1, 2});
     ASSERT_FALSE(tree.empty());
 
-    // The tree should have a hierarchical structure.
-    // Find root.
     std::size_t root_idx = SIZE_MAX;
     for (std::size_t i = 0; i < tree.size(); ++i) {
         if (tree[i].parent_index == SIZE_MAX) {
@@ -274,12 +206,17 @@ TEST(MrcaTracker, MrcaComputation_ThreeWay) {
     }
     ASSERT_NE(root_idx, SIZE_MAX);
 
-    // Root should have children.
-    EXPECT_GE(tree[root_idx].children.size(), 2u);
+    // Tree: root MRCA (shared ancestor at gen 0-1)
+    //       ├── internal MRCA (slots 0+1 shared until gen 4)
+    //       │   ├── leaf slot 0 (ID=2)
+    //       │   └── leaf slot 1 (ID=3)
+    //       └── leaf slot 2 (ID=4)
+    // = 5 nodes: root + internal + 3 leaves.
+    EXPECT_EQ(tree.size(), 5u);
+    EXPECT_EQ(tree[root_idx].children.size(), 2u);
 
-    // Count total nodes: should be 5 (root + internal + 3 leaves).
-    // Or could be 3 if all are leaves from root directly.
-    EXPECT_GE(tree.size(), 3u);
+    // Root MRCA should be the shared ancestor (individual_id=1).
+    EXPECT_EQ(tree[root_idx].entry.individual_id, 1u);
 
     // Verify single root.
     std::size_t root_count = 0;
@@ -384,4 +321,127 @@ TEST(MrcaTracker, SingleElite_MrcaTree) {
     ASSERT_EQ(tree.size(), 1u);
     EXPECT_EQ(tree[0].parent_index, SIZE_MAX);
     EXPECT_TRUE(tree[0].children.empty());
+}
+
+// ---------------------------------------------------------------------------
+// MrcaComputation_WalkthroughScenario
+// ---------------------------------------------------------------------------
+// Mirrors the walkthrough: 3 elite slots, all start from the same clone,
+// then mutants progressively displace elites over 5 generations.
+//
+//   Gen 1: all 3 slots = 0xAA (Alpha clones, shared entry)
+//   Gen 2: slot 0 = 0xBB (M1), slots 1-2 = 0xAA
+//   Gen 3: slot 0 = 0xBB, slot 1 = 0xAA, slot 2 = 0xCC (M2)
+//   Gen 4: slot 0 = 0xBB, slot 1 = 0xDD (M3), slot 2 = 0xCC
+//   Gen 5: no changes
+//
+// Expected tree when saving all 3 at gen 5:
+//   MRCA (Alpha, gen 1) ─┬─ M1 (slot 0)
+//                         └─ MRCA (Alpha persisted, gen 1) ─┬─ M3 (slot 1)
+//                                                           └─ M2 (slot 2)
+
+TEST(MrcaTracker, MrcaComputation_WalkthroughScenario) {
+    nf::MrcaTracker tracker(3, 1024 * 1024, 100);
+
+    record(tracker, 1, {0xAA, 0xAA, 0xAA});
+    record(tracker, 2, {0xBB, 0xAA, 0xAA});
+    record(tracker, 3, {0xBB, 0xAA, 0xCC});
+    record(tracker, 4, {0xBB, 0xDD, 0xCC});
+    record(tracker, 5, {0xBB, 0xDD, 0xCC});
+
+    // Shared entry for 0xAA + one each for 0xBB, 0xCC, 0xDD = 4 entries.
+    EXPECT_EQ(tracker.entry_count(), 4u);
+
+    // All chains should have 5 generations recorded.
+    EXPECT_EQ(tracker.chain_ancestor_ids(0).size(), 5u);
+    EXPECT_EQ(tracker.chain_ancestor_ids(1).size(), 5u);
+    EXPECT_EQ(tracker.chain_ancestor_ids(2).size(), 5u);
+
+    // Chains 0, 1, 2 should share the same entry ID at gen index 0.
+    EXPECT_EQ(tracker.chain_ancestor_ids(0)[0],
+              tracker.chain_ancestor_ids(1)[0]);
+    EXPECT_EQ(tracker.chain_ancestor_ids(1)[0],
+              tracker.chain_ancestor_ids(2)[0]);
+
+    // Chains 1 and 2 should still share at gen index 1 (both still 0xAA).
+    EXPECT_EQ(tracker.chain_ancestor_ids(1)[1],
+              tracker.chain_ancestor_ids(2)[1]);
+
+    // Chain 0 should have diverged at gen index 1 (0xBB != 0xAA).
+    EXPECT_NE(tracker.chain_ancestor_ids(0)[1],
+              tracker.chain_ancestor_ids(1)[1]);
+
+    auto tree = tracker.compute_mrca_tree({0, 1, 2});
+    ASSERT_FALSE(tree.empty());
+
+    // 5 nodes: root MRCA + internal MRCA + 3 leaves.
+    EXPECT_EQ(tree.size(), 5u);
+
+    // Find root.
+    std::size_t root_idx = SIZE_MAX;
+    for (std::size_t i = 0; i < tree.size(); ++i) {
+        if (tree[i].parent_index == SIZE_MAX) {
+            root_idx = i;
+            break;
+        }
+    }
+    ASSERT_NE(root_idx, SIZE_MAX);
+
+    // Root is the shared Alpha ancestor.
+    EXPECT_EQ(tree[root_idx].entry.individual_id, 0xAAu);
+    EXPECT_EQ(tree[root_idx].children.size(), 2u);
+
+    // One child should be a leaf (M1), the other an internal MRCA node.
+    std::size_t leaf_child = SIZE_MAX;
+    std::size_t internal_child = SIZE_MAX;
+    for (std::size_t c : tree[root_idx].children) {
+        if (tree[c].children.empty()) {
+            leaf_child = c;
+        } else {
+            internal_child = c;
+        }
+    }
+    ASSERT_NE(leaf_child, SIZE_MAX);
+    ASSERT_NE(internal_child, SIZE_MAX);
+
+    // The leaf directly under root is M1 (0xBB — diverged earliest).
+    EXPECT_EQ(tree[leaf_child].entry.individual_id, 0xBBu);
+
+    // The internal node is the second MRCA (Alpha persisted in slots 1 & 2).
+    EXPECT_EQ(tree[internal_child].entry.individual_id, 0xAAu);
+    EXPECT_EQ(tree[internal_child].children.size(), 2u);
+
+    // Its two children are M3 (0xDD) and M2 (0xCC).
+    std::vector<uint32_t> grandchild_ids;
+    for (std::size_t c : tree[internal_child].children) {
+        EXPECT_TRUE(tree[c].children.empty());  // both are leaves
+        grandchild_ids.push_back(tree[c].entry.individual_id);
+    }
+    std::sort(grandchild_ids.begin(), grandchild_ids.end());
+    EXPECT_EQ(grandchild_ids[0], 0xCCu);  // M2
+    EXPECT_EQ(grandchild_ids[1], 0xDDu);  // M3
+}
+
+// ---------------------------------------------------------------------------
+// SharedEntryIds_SameHashSameGeneration
+// ---------------------------------------------------------------------------
+// Verifies that two slots with the same individual hash in the same
+// generation share one entry (not two).
+
+TEST(MrcaTracker, SharedEntryIds_SameHashSameGeneration) {
+    nf::MrcaTracker tracker(3, 1024 * 1024, 100);
+
+    // All three slots have ID=42 — should produce 1 entry, not 3.
+    record(tracker, 0, {42, 42, 42});
+    EXPECT_EQ(tracker.entry_count(), 1u);
+
+    // All chains reference the same entry ID.
+    EXPECT_EQ(tracker.chain_ancestor_ids(0)[0],
+              tracker.chain_ancestor_ids(1)[0]);
+    EXPECT_EQ(tracker.chain_ancestor_ids(1)[0],
+              tracker.chain_ancestor_ids(2)[0]);
+
+    // Two slots share, one is different — should produce 2 entries.
+    record(tracker, 1, {42, 99, 42});
+    EXPECT_EQ(tracker.entry_count(), 2u);
 }
