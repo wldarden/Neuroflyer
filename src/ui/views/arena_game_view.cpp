@@ -133,6 +133,7 @@ void ArenaGameView::render(const ArenaSession& arena, const Camera& camera,
     SDL_RenderSetClipRect(renderer_, &clip);
 
     render_background();
+    render_bases(arena.bases(), camera);
     render_towers(arena.towers(), camera);
     render_tokens(arena.tokens(), camera);
     render_bullets(arena.bullets(), camera);
@@ -158,6 +159,57 @@ void ArenaGameView::render_background() {
     SDL_SetRenderDrawColor(renderer_, 10, 10, 20, 255);
     SDL_Rect bg = {x_, y_, w_, h_};
     SDL_RenderFillRect(renderer_, &bg);
+}
+
+// ---------------------------------------------------------------------------
+// Bases (team-colored circles with HP bars)
+// ---------------------------------------------------------------------------
+
+void ArenaGameView::render_bases(const std::vector<Base>& bases,
+                                  const Camera& camera) {
+    for (const auto& base : bases) {
+        if (!base.alive()) continue;
+
+        auto [sx, sy] = camera.world_to_screen(base.x, base.y, w_, h_);
+        float screen_x = sx + static_cast<float>(x_);
+        float screen_y = sy + static_cast<float>(y_);
+        float sr = base.radius * camera.zoom;
+
+        // Off-screen culling
+        if (screen_x + sr < static_cast<float>(x_) ||
+            screen_x - sr > static_cast<float>(x_ + w_) ||
+            screen_y + sr < static_cast<float>(y_) ||
+            screen_y - sr > static_cast<float>(y_ + h_)) {
+            continue;
+        }
+
+        // Base body (team-colored, semi-transparent)
+        const auto& color = team_color(base.team_id);
+        draw_filled_circle(renderer_, screen_x, screen_y, sr,
+                           color.r, color.g, color.b, 60);
+        // Base outline
+        draw_circle_outline(renderer_, screen_x, screen_y, sr,
+                            color.r, color.g, color.b, 200);
+
+        // HP bar above base
+        float bar_w = sr * 2.0f;
+        float bar_h = 4.0f;
+        float bar_x = screen_x - sr;
+        float bar_y = screen_y - sr - 10.0f;
+        float hp_frac = base.hp_normalized();
+
+        // Background (dark)
+        SDL_SetRenderDrawColor(renderer_, 40, 40, 40, 200);
+        SDL_FRect bg = {bar_x, bar_y, bar_w, bar_h};
+        SDL_RenderFillRectF(renderer_, &bg);
+
+        // HP fill (green to red gradient)
+        uint8_t r = static_cast<uint8_t>((1.0f - hp_frac) * 255);
+        uint8_t g = static_cast<uint8_t>(hp_frac * 255);
+        SDL_SetRenderDrawColor(renderer_, r, g, 0, 230);
+        SDL_FRect hp_rect = {bar_x, bar_y, bar_w * hp_frac, bar_h};
+        SDL_RenderFillRectF(renderer_, &hp_rect);
+    }
 }
 
 // ---------------------------------------------------------------------------

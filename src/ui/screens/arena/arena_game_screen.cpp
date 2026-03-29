@@ -12,7 +12,9 @@
 #include <SDL.h>
 
 #include <algorithm>
+#include <cmath>
 #include <iostream>
+#include <limits>
 #include <memory>
 
 namespace neuroflyer {
@@ -31,71 +33,81 @@ void ArenaGameScreen::on_enter() {
 // ==================== Initialization ====================
 
 void ArenaGameScreen::initialize(AppState& state) {
-    // Population setup: use pending_population if available, else create random
-    constexpr std::size_t action_count = ACTION_COUNT;
-    std::size_t pop_size = config_.population_size();
+    // Setup squad config
+    squad_config_.input_size = 8;
+    squad_config_.hidden_sizes = {6};
+    squad_config_.output_size = config_.squad_broadcast_signals;
 
-    evo_config_.population_size = pop_size;
-
+    // Create team population
+    // If pending population exists, use a legacy ship design. Otherwise create fresh.
     if (!state.pending_population.empty()) {
-        population_ = std::move(state.pending_population);
-        state.pending_population.clear();
         ship_design_ = state.pending_ship_design;
+        state.pending_population.clear();
         state.pending_ship_design = ShipDesign{};
-        std::cout << "Arena: using pre-built population ("
-                  << population_.size() << " individuals)\n";
-
-        // If we got fewer individuals than needed, duplicate to fill
-        std::size_t original_size = population_.size();
-        while (population_.size() < pop_size && original_size > 0) {
-            population_.push_back(population_[population_.size() % original_size]);
-        }
-        // If we got more, truncate
-        if (population_.size() > pop_size) {
-            population_.resize(pop_size);
-        }
     } else {
-        std::cout << "Arena: starting with random population ("
-                  << pop_size << " ships)\n";
         ship_design_ = create_legacy_ship_design(4);
-        std::size_t input_size = compute_input_size(ship_design_);
-        std::size_t output_size = action_count + ship_design_.memory_slots;
-        population_ = create_population(
-            input_size, {12, 12}, output_size, evo_config_, state.rng);
     }
 
-    // Compile networks from population
-    networks_.clear();
-    networks_.reserve(population_.size());
-    for (auto& ind : population_) {
-        networks_.push_back(ind.build_network());
-    }
+    std::size_t team_pop_size = 20;  // number of team genomes
+    evo_config_.population_size = team_pop_size;
+    evo_config_.elitism_count = 2;
 
-    // Initialize recurrent states
-    recurrent_states_.assign(
-        population_.size(),
-        std::vector<float>(ship_design_.memory_slots, 0.0f));
+    team_population_ = create_team_population(
+        ship_design_, {8, 8}, squad_config_, team_pop_size, state.rng);
 
-    // Create arena session
-    uint32_t seed = static_cast<uint32_t>(state.rng());
-    arena_ = std::make_unique<ArenaSession>(config_, seed);
+    // Start first match
+    start_new_match(state);
 
-    // Set camera to world center at zoom 0.5
+    // Camera setup
     camera_.x = config_.world_width / 2.0f;
     camera_.y = config_.world_height / 2.0f;
     camera_.zoom = 0.5f;
     camera_.following = true;
     camera_.follow_index = 0;
 
-    // Reset game state
     generation_ = 1;
     ticks_per_frame_ = 1;
     current_round_ = 0;
-    cumulative_scores_.assign(population_.size(), 0.0f);
+    team_fitness_.assign(team_population_.size(), 0.0f);
     selected_ship_ = 0;
     paused_ = false;
-
     initialized_ = true;
+}
+
+// ==================== Match setup ====================
+
+void ArenaGameScreen::start_new_match(AppState& state) {
+    uint32_t seed = static_cast<uint32_t>(state.rng());
+    arena_ = std::make_unique<ArenaSession>(config_, seed);
+
+    // For now, use team genomes 0 and 1
+    // (In future: matchmaking picks different pairs per round)
+    current_team_indices_ = {0, 1};
+
+    // Compile networks
+    squad_nets_.clear();
+    fighter_nets_.clear();
+    for (auto idx : current_team_indices_) {
+        squad_nets_.push_back(team_population_[idx].build_squad_network());
+        fighter_nets_.push_back(team_population_[idx].build_fighter_network());
+    }
+
+    // Build ship-to-team lookup
+    std::size_t num_ships = arena_->ships().size();
+    ship_teams_.resize(num_ships);
+    for (std::size_t i = 0; i < num_ships; ++i) {
+        ship_teams_[i] = arena_->team_of(i);
+    }
+
+    // Init recurrent states
+    recurrent_states_.assign(
+        num_ships,
+        std::vector<float>(ship_design_.memory_slots, 0.0f));
+
+    // Init broadcasts
+    team_broadcasts_.assign(
+        config_.num_teams,
+        std::vector<float>(squad_config_.output_size, 0.0f));
 }
 
 // ==================== Input handling ====================
@@ -168,26 +180,95 @@ void ArenaGameScreen::handle_input(UIManager& ui) {
 void ArenaGameScreen::tick_arena(AppState& /*state*/) {
     if (!arena_ || arena_->is_over()) return;
 
-    const auto& ships = arena_->ships();
+    // 1. Run squad net per team
+    for (std::size_t t = 0; t < config_.num_teams; ++t) {
+        auto stats = arena_->compute_squad_stats(static_cast<int>(t), 0);
 
-    for (std::size_t i = 0; i < ships.size(); ++i) {
-        if (!ships[i].alive) continue;
+        float own_base_hp = arena_->bases()[t].hp_normalized();
+        float enemy_base_hp = 0.0f;
+        for (const auto& base : arena_->bases()) {
+            if (base.team_id != static_cast<int>(t)) {
+                enemy_base_hp = base.hp_normalized();
+                break;
+            }
+        }
 
-        // Build neural net input using sensor engine
-        // Arena mode uses world-relative positions; we pass world dimensions
-        // and use 0 scroll_speed since arena is static
-        auto input = build_ship_input(
-            ship_design_,
-            ships[i].x, ships[i].y,
-            config_.world_width, config_.world_height,
-            0.0f,  // no scroll speed in arena
-            0.0f,  // pts_per_token not used for scoring here
-            arena_->towers(), arena_->tokens(),
+        std::vector<float> squad_input = {
+            stats.alive_fraction,
+            stats.avg_dist_to_enemy_base,
+            stats.avg_dist_to_home,
+            stats.centroid_dir_sin,
+            stats.centroid_dir_cos,
+            own_base_hp,
+            enemy_base_hp,
+            static_cast<float>(arena_->current_tick()) /
+                static_cast<float>(config_.time_limit_ticks)
+        };
+
+        team_broadcasts_[t] = squad_nets_[t].forward(squad_input);
+    }
+
+    // 2. Run fighter nets
+    for (std::size_t i = 0; i < arena_->ships().size(); ++i) {
+        if (!arena_->ships()[i].alive) continue;
+
+        int team = ship_teams_[i];
+        auto t = static_cast<std::size_t>(team);
+
+        // Find target (nearest enemy base) and home base
+        float target_x = 0, target_y = 0;
+        float min_dist_sq = std::numeric_limits<float>::max();
+        for (const auto& base : arena_->bases()) {
+            if (base.team_id == team) continue;
+            float dx = base.x - arena_->ships()[i].x;
+            float dy = base.y - arena_->ships()[i].y;
+            float dist_sq = dx * dx + dy * dy;
+            if (dist_sq < min_dist_sq) {
+                min_dist_sq = dist_sq;
+                target_x = base.x;
+                target_y = base.y;
+            }
+        }
+
+        float home_x = arena_->bases()[t].x;
+        float home_y = arena_->bases()[t].y;
+        float own_base_hp = arena_->bases()[t].hp_normalized();
+
+        auto target_dr = compute_dir_range(
+            arena_->ships()[i].x, arena_->ships()[i].y,
+            target_x, target_y,
+            config_.world_width, config_.world_height);
+        auto home_dr = compute_dir_range(
+            arena_->ships()[i].x, arena_->ships()[i].y,
+            home_x, home_y,
+            config_.world_width, config_.world_height);
+
+        // Build query context (spans -- no copies)
+        ArenaQueryContext ctx;
+        ctx.ship_x = arena_->ships()[i].x;
+        ctx.ship_y = arena_->ships()[i].y;
+        ctx.ship_rotation = arena_->ships()[i].rotation;
+        ctx.world_w = config_.world_width;
+        ctx.world_h = config_.world_height;
+        ctx.self_index = i;
+        ctx.self_team = team;
+        ctx.towers = arena_->towers();
+        ctx.tokens = arena_->tokens();
+        ctx.ships = arena_->ships();
+        ctx.ship_teams = ship_teams_;
+        ctx.bullets = arena_->bullets();
+
+        auto input = build_arena_ship_input(
+            ship_design_, ctx,
+            target_dr.dir_sin, target_dr.dir_cos, target_dr.range,
+            home_dr.dir_sin, home_dr.dir_cos, home_dr.range,
+            own_base_hp,
+            team_broadcasts_[t],
             recurrent_states_[i]);
 
-        auto output = networks_[i].forward(input);
-
+        auto output = fighter_nets_[t].forward(input);
         auto decoded = decode_output(output, ship_design_.memory_slots);
+
         arena_->set_ship_actions(i, decoded.up, decoded.down,
                                  decoded.left, decoded.right, decoded.shoot);
         recurrent_states_[i] = decoded.memory;
@@ -199,46 +280,23 @@ void ArenaGameScreen::tick_arena(AppState& /*state*/) {
 // ==================== Evolution ====================
 
 void ArenaGameScreen::do_arena_evolution(AppState& state) {
-    // Assign fitness from cumulative scores
-    for (std::size_t i = 0; i < population_.size(); ++i) {
-        population_[i].fitness = cumulative_scores_[i];
-    }
-
-    // Log generation stats
-    float avg = 0.0f;
+    // Log
     float best = 0.0f;
-    for (auto& ind : population_) {
-        avg += ind.fitness;
-        best = std::max(best, ind.fitness);
+    for (const auto& t : team_population_) {
+        best = std::max(best, t.fitness);
     }
-    avg /= static_cast<float>(population_.size());
-
-    std::cout << "[Arena Gen " << generation_ << "] Best: "
-              << static_cast<int>(best) << " Avg: "
-              << static_cast<int>(avg) << "\n";
+    std::cout << "[Arena Gen " << generation_ << "] Best team fitness: "
+              << static_cast<int>(best) << "\n";
 
     // Evolve
-    population_ = evolve_population(population_, evo_config_, state.rng);
-
-    // Rebuild networks
-    networks_.clear();
-    networks_.reserve(population_.size());
-    for (auto& ind : population_) {
-        networks_.push_back(ind.build_network());
-    }
-
-    // Reset recurrent states
-    recurrent_states_.assign(
-        population_.size(),
-        std::vector<float>(ship_design_.memory_slots, 0.0f));
-
-    // New arena session
-    uint32_t seed = static_cast<uint32_t>(state.rng());
-    arena_ = std::make_unique<ArenaSession>(config_, seed);
+    team_population_ = evolve_team_population(team_population_, evo_config_, state.rng);
 
     generation_++;
     current_round_ = 0;
-    cumulative_scores_.assign(population_.size(), 0.0f);
+    team_fitness_.assign(team_population_.size(), 0.0f);
+
+    // Start new match
+    start_new_match(state);
 }
 
 // ==================== Render ====================
@@ -310,9 +368,9 @@ void ArenaGameScreen::render_arena(Renderer& renderer) {
     const auto& ek = arena_->enemy_kills();
     const auto& ak = arena_->ally_kills();
     for (std::size_t i = 0; i < ek.size(); ++i) {
-        auto t = static_cast<std::size_t>(arena_->team_of(i));
-        info.team_enemy_kills[t] += ek[i];
-        info.team_ally_kills[t] += ak[i];
+        auto t_idx = static_cast<std::size_t>(arena_->team_of(i));
+        info.team_enemy_kills[t_idx] += ek[i];
+        info.team_ally_kills[t_idx] += ak[i];
     }
     info.team_scores = arena_->get_scores();
 
@@ -340,33 +398,55 @@ void ArenaGameScreen::on_draw(AppState& state, Renderer& renderer,
 
             // Check if round is over
             if (arena_ && arena_->is_over()) {
-                // Accumulate scores from this round
-                auto scores = arena_->get_scores();
-                // Arena scores are per-team; distribute to per-individual
-                for (std::size_t i = 0; i < population_.size(); ++i) {
-                    int team = arena_->team_of(i);
-                    if (team >= 0 && static_cast<std::size_t>(team) < scores.size()) {
-                        cumulative_scores_[i] += scores[static_cast<std::size_t>(team)];
+                // Compute team fitness for this round
+                for (std::size_t ti = 0; ti < config_.num_teams; ++ti) {
+                    int team = static_cast<int>(ti);
+
+                    // Damage dealt: average of (max_hp - hp) / max_hp for each enemy base
+                    float damage_dealt = 0.0f;
+                    for (const auto& base : arena_->bases()) {
+                        if (base.team_id != team) {
+                            damage_dealt += (base.max_hp - base.hp) / base.max_hp;
+                        }
                     }
-                    // Individual survival bonus
-                    if (arena_->ships()[i].alive) {
-                        cumulative_scores_[i] += 10.0f;
+                    if (config_.num_teams > 1) {
+                        damage_dealt /= static_cast<float>(config_.num_teams - 1);
                     }
+
+                    // Own survival: own base HP normalized
+                    float own_survival = arena_->bases()[ti].hp_normalized();
+
+                    // Alive fraction and token count
+                    float ships_alive_count = 0, ship_total = 0;
+                    int team_tokens = 0;
+                    const auto& tc = arena_->tokens_collected();
+                    for (std::size_t i = 0; i < arena_->ships().size(); ++i) {
+                        if (ship_teams_[i] == team) {
+                            ship_total += 1.0f;
+                            if (arena_->ships()[i].alive) ships_alive_count += 1.0f;
+                            team_tokens += tc[i];
+                        }
+                    }
+                    float alive_frac = ship_total > 0
+                        ? ships_alive_count / ship_total : 0.0f;
+                    float token_frac = config_.token_count > 0
+                        ? static_cast<float>(team_tokens) / static_cast<float>(config_.token_count)
+                        : 0.0f;
+
+                    float score = config_.fitness_weight_base_damage * damage_dealt
+                                + config_.fitness_weight_survival * own_survival
+                                + config_.fitness_weight_ships_alive * alive_frac
+                                + config_.fitness_weight_tokens * token_frac;
+
+                    auto team_genome_idx = current_team_indices_[ti];
+                    team_population_[team_genome_idx].fitness += score;
                 }
 
                 current_round_++;
-
                 if (current_round_ >= config_.rounds_per_generation) {
-                    // All rounds done: evolve
                     do_arena_evolution(state);
                 } else {
-                    // Start next round with same population
-                    recurrent_states_.assign(
-                        population_.size(),
-                        std::vector<float>(ship_design_.memory_slots, 0.0f));
-
-                    uint32_t seed = static_cast<uint32_t>(state.rng());
-                    arena_ = std::make_unique<ArenaSession>(config_, seed);
+                    start_new_match(state);
                 }
                 break;  // Don't tick further after reset
             }

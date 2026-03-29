@@ -1,6 +1,7 @@
 #pragma once
 
 #include <neuroflyer/arena_session.h>
+#include <neuroflyer/base.h>
 #include <neuroflyer/camera.h>
 
 #include <SDL.h>
@@ -20,6 +21,7 @@ public:
 
 private:
     void render_background();
+    void render_bases(const std::vector<Base>& bases, const Camera& camera);
     void render_towers(const std::vector<Tower>& towers, const Camera& camera);
     void render_tokens(const std::vector<Token>& tokens, const Camera& camera);
     void render_ships(const std::vector<Triangle>& ships, const Camera& camera,
