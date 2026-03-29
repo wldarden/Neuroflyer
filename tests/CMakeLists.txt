@@ -16,6 +16,7 @@ add_executable(neuroflyer_tests
     camera_test.cpp
     arena_sensor_test.cpp
     team_evolution_test.cpp
+    arena_match_test.cpp
     ../src/engine/game.cpp
     ../src/engine/arena_session.cpp
     ../src/engine/ray.cpp
@@ -27,6 +28,7 @@ add_executable(neuroflyer_tests
     ../src/engine/mrca_tracker.cpp
     ../src/engine/arena_sensor.cpp
     ../src/engine/team_evolution.cpp
+    ../src/engine/arena_match.cpp
 )
 target_include_directories(neuroflyer_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../include
