@@ -6,10 +6,12 @@
 #include <neuroflyer/arena_session.h>
 #include <neuroflyer/camera.h>
 #include <neuroflyer/evolution.h>
+#include <neuroflyer/snapshot.h>
 #include <neuroflyer/team_evolution.h>
 #include <neuroflyer/ui/ui_screen.h>
 
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace neuroflyer {
@@ -56,6 +58,13 @@ private:
     std::size_t current_round_ = 0;
     int selected_ship_ = 0;
     bool paused_ = false;
+
+    // Squad training mode: freeze fighters, evolve only squad nets
+    bool squad_training_mode_ = false;
+    bool base_attack_mode_ = false;
+    std::string squad_paired_fighter_name_;
+    std::string squad_genome_dir_;
+    Snapshot paired_fighter_snapshot_;  // loaded once, reused to refreeze fighters
 };
 
 } // namespace neuroflyer

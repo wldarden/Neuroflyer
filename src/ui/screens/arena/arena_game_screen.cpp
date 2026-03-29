@@ -7,12 +7,15 @@
 #include <neuroflyer/app_state.h>
 #include <neuroflyer/renderer.h>
 #include <neuroflyer/sensor_engine.h>
+#include <neuroflyer/snapshot_io.h>
+#include <neuroflyer/snapshot_utils.h>
 
 #include <imgui.h>
 #include <SDL.h>
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -54,6 +57,45 @@ void ArenaGameScreen::initialize(AppState& state) {
 
     team_population_ = create_team_population(
         ship_design_, {8, 8}, squad_config_, team_pop_size, state.rng);
+
+    // Check for squad training mode from AppState
+    squad_training_mode_ = state.squad_training_mode;
+    base_attack_mode_ = state.base_attack_mode;
+    state.squad_training_mode = false;  // consume flags
+    state.base_attack_mode = false;
+
+    if (squad_training_mode_) {
+        squad_paired_fighter_name_ = state.squad_paired_fighter_name;
+        squad_genome_dir_ = state.squad_training_genome_dir;
+
+        // Initialize squad config
+        squad_config_.input_size = 8;
+        squad_config_.hidden_sizes = {6};
+        squad_config_.output_size = config_.squad_broadcast_signals;
+
+        // Load the paired fighter snapshot
+        // Try variant path first, fall back to genome.bin (root)
+        std::string fighter_path = squad_genome_dir_ + "/" + squad_paired_fighter_name_ + ".bin";
+        if (!std::filesystem::exists(fighter_path)) {
+            fighter_path = squad_genome_dir_ + "/genome.bin";
+        }
+        paired_fighter_snapshot_ = load_snapshot(fighter_path);
+        ship_design_ = paired_fighter_snapshot_.ship_design;
+
+        // Override team population: create squad nets, freeze fighters
+        auto fighter_ind = snapshot_to_individual(paired_fighter_snapshot_);
+        team_pop_size = 20;
+        evo_config_.population_size = team_pop_size;
+        team_population_.clear();
+        for (std::size_t i = 0; i < team_pop_size; ++i) {
+            auto team = TeamIndividual::create(ship_design_, {8, 8}, squad_config_, state.rng);
+            team.fighter_individual = fighter_ind;  // frozen copy
+            team_population_.push_back(std::move(team));
+        }
+
+        std::cout << "Squad training mode: fighter=\"" << squad_paired_fighter_name_
+                  << "\", evolving squad nets only\n";
+    }
 
     // Start first match
     start_new_match(state);
@@ -97,6 +139,15 @@ void ArenaGameScreen::start_new_match(AppState& state) {
     ship_teams_.resize(num_ships);
     for (std::size_t i = 0; i < num_ships; ++i) {
         ship_teams_[i] = arena_->team_of(i);
+    }
+
+    // Base Attack: kill all team 1 fighters (undefended base)
+    if (base_attack_mode_) {
+        for (std::size_t i = 0; i < num_ships; ++i) {
+            if (arena_->team_of(i) == 1) {
+                arena_->ships()[i].alive = false;
+            }
+        }
     }
 
     // Init recurrent states
@@ -289,7 +340,16 @@ void ArenaGameScreen::do_arena_evolution(AppState& state) {
               << static_cast<int>(best) << "\n";
 
     // Evolve
-    team_population_ = evolve_team_population(team_population_, evo_config_, state.rng);
+    if (squad_training_mode_) {
+        team_population_ = evolve_squad_only(team_population_, evo_config_, state.rng);
+        // Refreeze fighter weights from paired snapshot
+        auto fighter_ind = snapshot_to_individual(paired_fighter_snapshot_);
+        for (auto& team : team_population_) {
+            team.fighter_individual = fighter_ind;
+        }
+    } else {
+        team_population_ = evolve_team_population(team_population_, evo_config_, state.rng);
+    }
 
     generation_++;
     current_round_ = 0;
