@@ -6,7 +6,8 @@ namespace nf = neuroflyer;
 TEST(ArenaSessionTest, Construction) {
     nf::ArenaConfig config;
     config.num_teams = 2;
-    config.team_size = 5;
+    config.num_squads = 1;
+    config.fighters_per_squad = 5;
     config.tower_count = 10;
     config.token_count = 5;
     nf::ArenaSession arena(config, 42);
@@ -19,7 +20,8 @@ TEST(ArenaSessionTest, Construction) {
 TEST(ArenaSessionTest, TeamAssignment) {
     nf::ArenaConfig config;
     config.num_teams = 4;
-    config.team_size = 3;
+    config.num_squads = 1;
+    config.fighters_per_squad = 3;
     nf::ArenaSession arena(config, 42);
     EXPECT_EQ(arena.team_of(0), 0);
     EXPECT_EQ(arena.team_of(2), 0);
@@ -32,7 +34,8 @@ TEST(ArenaSessionTest, SpawnInRing) {
     config.world_width = 1000.0f;
     config.world_height = 1000.0f;
     config.num_teams = 4;
-    config.team_size = 5;
+    config.num_squads = 1;
+    config.fighters_per_squad = 5;
     nf::ArenaSession arena(config, 42);
     float center_x = config.world_width / 2.0f;
     float center_y = config.world_height / 2.0f;
@@ -53,7 +56,8 @@ TEST(ArenaSessionTest, ShipsFaceCenter) {
     config.world_width = 1000.0f;
     config.world_height = 1000.0f;
     config.num_teams = 2;
-    config.team_size = 1;
+    config.num_squads = 1;
+    config.fighters_per_squad = 1;
     nf::ArenaSession arena(config, 42);
     float cx = config.world_width / 2.0f;
     float cy = config.world_height / 2.0f;
@@ -70,7 +74,8 @@ TEST(ArenaSessionTest, ShipsFaceCenter) {
 TEST(ArenaSessionTest, TickAdvances) {
     nf::ArenaConfig config;
     config.num_teams = 2;
-    config.team_size = 2;
+    config.num_squads = 1;
+    config.fighters_per_squad = 2;
     config.tower_count = 0;
     config.token_count = 0;
     config.time_limit_ticks = 100;
@@ -82,7 +87,8 @@ TEST(ArenaSessionTest, TickAdvances) {
 TEST(ArenaSessionTest, TimeLimitEndsRound) {
     nf::ArenaConfig config;
     config.num_teams = 2;
-    config.team_size = 1;
+    config.num_squads = 1;
+    config.fighters_per_squad = 1;
     config.tower_count = 0;
     config.token_count = 0;
     config.time_limit_ticks = 5;
@@ -94,7 +100,8 @@ TEST(ArenaSessionTest, TimeLimitEndsRound) {
 TEST(ArenaSessionTest, SurvivalScoring) {
     nf::ArenaConfig config;
     config.num_teams = 2;
-    config.team_size = 1;
+    config.num_squads = 1;
+    config.fighters_per_squad = 1;
     config.tower_count = 0;
     config.token_count = 0;
     config.time_limit_ticks = 100;
@@ -113,7 +120,8 @@ TEST(ArenaSessionTest, WrapNS) {
     config.wrap_ns = true;
     config.wrap_ew = false;
     config.num_teams = 1;
-    config.team_size = 1;
+    config.num_squads = 1;
+    config.fighters_per_squad = 1;
     config.tower_count = 0;
     config.token_count = 0;
     config.time_limit_ticks = 1000;
@@ -130,7 +138,8 @@ TEST(ArenaSessionTest, ClampEW) {
     config.wrap_ns = false;
     config.wrap_ew = false;
     config.num_teams = 1;
-    config.team_size = 1;
+    config.num_squads = 1;
+    config.fighters_per_squad = 1;
     config.tower_count = 0;
     config.token_count = 0;
     config.time_limit_ticks = 1000;
@@ -143,7 +152,8 @@ TEST(ArenaSessionTest, ClampEW) {
 TEST(ArenaSessionTest, BulletShipCollisionSkipsSelf) {
     nf::ArenaConfig config;
     config.num_teams = 2;
-    config.team_size = 1;
+    config.num_squads = 1;
+    config.fighters_per_squad = 1;
     config.tower_count = 0;
     config.token_count = 0;
     config.time_limit_ticks = 1000;
@@ -167,7 +177,8 @@ TEST(ArenaSessionTest, BulletShipCollisionSkipsSelf) {
 TEST(ArenaSessionTest, BulletKillsEnemy) {
     nf::ArenaConfig config;
     config.num_teams = 2;
-    config.team_size = 1;
+    config.num_squads = 1;
+    config.fighters_per_squad = 1;
     config.tower_count = 0;
     config.token_count = 0;
     config.time_limit_ticks = 1000;
@@ -191,7 +202,8 @@ TEST(ArenaSessionTest, BulletKillsEnemy) {
 TEST(ArenaSessionTest, LastTeamStandingEndsRound) {
     nf::ArenaConfig config;
     config.num_teams = 2;
-    config.team_size = 1;
+    config.num_squads = 1;
+    config.fighters_per_squad = 1;
     config.tower_count = 0;
     config.token_count = 0;
     config.time_limit_ticks = 10000;
@@ -206,7 +218,8 @@ TEST(ArenaSessionTest, LastTeamStandingEndsRound) {
 TEST(ArenaSessionTest, EnemyKillAwards1000Points) {
     nf::ArenaConfig config;
     config.num_teams = 2;
-    config.team_size = 1;
+    config.num_squads = 1;
+    config.fighters_per_squad = 1;
     config.tower_count = 0;
     config.token_count = 0;
     config.time_limit_ticks = 1000;
@@ -240,7 +253,8 @@ TEST(ArenaSessionTest, EnemyKillAwards1000Points) {
 TEST(ArenaSessionTest, AllyKillRemoves1000Points) {
     nf::ArenaConfig config;
     config.num_teams = 2;
-    config.team_size = 2;  // 2 ships per team
+    config.num_squads = 1;
+    config.fighters_per_squad = 2;  // 2 ships per team
     config.tower_count = 0;
     config.token_count = 0;
     config.time_limit_ticks = 1000;
@@ -270,4 +284,12 @@ TEST(ArenaSessionTest, AllyKillRemoves1000Points) {
     auto scores = arena.get_scores();
     // Team 0 should have -1000 from the ally kill
     EXPECT_LE(scores[0], -999.0f);
+}
+
+TEST(ArenaConfigTest, PopulationFromSquads) {
+    nf::ArenaConfig config;
+    config.num_teams = 2;
+    config.num_squads = 2;
+    config.fighters_per_squad = 4;
+    EXPECT_EQ(config.population_size(), 16u);
 }

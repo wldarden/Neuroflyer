@@ -11,10 +11,11 @@ ArenaSession::ArenaSession(const ArenaConfig& config, uint32_t seed)
     : config_(config), rng_(seed) {
     std::size_t pop = config.population_size();
 
-    // Build team assignments: ship i belongs to team i / team_size
+    // Build team assignments: ship i belongs to team i / ships_per_team
+    std::size_t ships_per_team = config.num_squads * config.fighters_per_squad;
     team_assignments_.resize(pop);
     for (std::size_t i = 0; i < pop; ++i) {
-        team_assignments_[i] = static_cast<int>(i / config.team_size);
+        team_assignments_[i] = static_cast<int>(i / ships_per_team);
     }
 
     survival_ticks_.resize(pop, 0.0f);

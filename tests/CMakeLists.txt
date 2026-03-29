@@ -1,6 +1,7 @@
 add_executable(neuroflyer_tests
     game_test.cpp
     arena_session_test.cpp
+    base_test.cpp
     ray_test.cpp
     evolution_test.cpp
     config_test.cpp

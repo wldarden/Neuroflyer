@@ -22,13 +22,18 @@ bool draw_arena_config_view(ArenaConfig& config) {
         config.num_teams = static_cast<std::size_t>(num_teams);
     }
 
-    int team_size = static_cast<int>(config.team_size);
-    if (ui::input_int("Team Size", &team_size, 5, 200)) {
-        config.team_size = static_cast<std::size_t>(team_size);
+    int num_squads = static_cast<int>(config.num_squads);
+    if (ui::input_int("Squads per Team", &num_squads, 1, 10)) {
+        config.num_squads = static_cast<std::size_t>(num_squads);
+    }
+
+    int fighters_per_squad = static_cast<int>(config.fighters_per_squad);
+    if (ui::input_int("Fighters per Squad", &fighters_per_squad, 1, 50)) {
+        config.fighters_per_squad = static_cast<std::size_t>(fighters_per_squad);
     }
 
     ImGui::TextDisabled("Population: %zu ships",
-        config.num_teams * config.team_size);
+        config.population_size());
     ImGui::Spacing();
 
     // --- World ---

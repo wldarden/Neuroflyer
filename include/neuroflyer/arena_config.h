@@ -12,7 +12,6 @@ struct ArenaConfig {
 
     // Teams
     std::size_t num_teams = 2;
-    std::size_t team_size = 50;
 
     // Round timing
     uint32_t time_limit_ticks = 60 * 60;  // 60 seconds at 60fps
@@ -32,9 +31,25 @@ struct ArenaConfig {
     // Ship
     float rotation_speed = 0.05f;   // radians per tick
 
+    // Bases
+    float base_hp = 1000.0f;
+    float base_radius = 100.0f;
+    float base_bullet_damage = 10.0f;  // HP removed per bullet hit
+
+    // Squads
+    std::size_t num_squads = 1;
+    std::size_t fighters_per_squad = 8;
+    std::size_t squad_broadcast_signals = 4;
+
+    // Fitness weights
+    float fitness_weight_base_damage = 1.0f;
+    float fitness_weight_survival = 0.5f;
+    float fitness_weight_ships_alive = 0.2f;
+    float fitness_weight_tokens = 0.3f;
+
     // Derived
     [[nodiscard]] std::size_t population_size() const noexcept {
-        return num_teams * team_size;
+        return num_teams * num_squads * fighters_per_squad;
     }
 };
 
