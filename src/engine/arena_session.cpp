@@ -393,6 +393,26 @@ SquadStats ArenaSession::compute_squad_stats(int team, int squad) const {
         }
     }
 
+    // Compute squad spacing: stddev of alive ship distances from centroid, normalized
+    if (alive_count > 0.0f) {
+        float diag = std::sqrt(config_.world_width * config_.world_width +
+                                config_.world_height * config_.world_height);
+        float sum_dist = 0.0f;
+        float sum_dist_sq = 0.0f;
+        for (std::size_t i = 0; i < ships_.size(); ++i) {
+            if (team_assignments_[i] != team || squad_assignments_[i] != squad) continue;
+            if (!ships_[i].alive) continue;
+            float dx = ships_[i].x - stats.centroid_x;
+            float dy = ships_[i].y - stats.centroid_y;
+            float dist = std::sqrt(dx * dx + dy * dy);
+            sum_dist += dist;
+            sum_dist_sq += dist * dist;
+        }
+        float mean_dist = sum_dist / alive_count;
+        float variance = (sum_dist_sq / alive_count) - (mean_dist * mean_dist);
+        stats.squad_spacing = std::sqrt(std::max(0.0f, variance)) / diag;
+    }
+
     return stats;
 }
 

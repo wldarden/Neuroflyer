@@ -16,6 +16,7 @@ struct SquadStats {
     float avg_dist_to_home = 0.0f;
     float avg_dist_to_enemy_base = 0.0f;
     float centroid_dir_sin = 0.0f, centroid_dir_cos = 0.0f;  // relative to home base
+    float squad_spacing = 0.0f;  // stddev of ship distances from squad center (normalized)
 };
 
 class ArenaSession {

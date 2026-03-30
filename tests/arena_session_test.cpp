@@ -440,3 +440,21 @@ TEST(ArenaSessionTest, SquadStats) {
     stats = arena.compute_squad_stats(0, 0);
     EXPECT_FLOAT_EQ(stats.alive_fraction, 0.5f);
 }
+
+TEST(ArenaSession, SquadStatsIncludesSpacing) {
+    nf::ArenaConfig cfg;
+    cfg.num_teams = 1;
+    cfg.num_squads = 1;
+    cfg.fighters_per_squad = 4;
+    cfg.tower_count = 0;
+    cfg.token_count = 0;
+    cfg.base_hp = 1000.0f;
+
+    nf::ArenaSession arena(cfg, 42);
+
+    auto stats = arena.compute_squad_stats(0, 0);
+
+    // Spacing should be a valid normalized value
+    EXPECT_GE(stats.squad_spacing, 0.0f);
+    EXPECT_LE(stats.squad_spacing, 1.0f);
+}
