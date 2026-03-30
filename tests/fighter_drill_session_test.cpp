@@ -211,3 +211,111 @@ TEST(FighterDrillSessionTest, BulletDamagesStarbase) {
 
     EXPECT_LT(session.starbase().hp, initial_hp);
 }
+
+// ── Task 5 tests ────────────────────────────────────────────────────────────
+
+TEST(FighterDrillSessionTest, PhaseTransitions) {
+    nf::FighterDrillConfig config;
+    config.population_size = 1;
+    config.tower_count = 0;
+    config.token_count = 0;
+    config.phase_duration_ticks = 10;
+    nf::FighterDrillSession session(config, 42);
+
+    EXPECT_EQ(session.phase(), nf::DrillPhase::Expand);
+    EXPECT_EQ(session.phase_ticks_remaining(), 10u);
+
+    for (uint32_t i = 0; i < 10; ++i) session.tick();
+    EXPECT_EQ(session.phase(), nf::DrillPhase::Contract);
+
+    for (uint32_t i = 0; i < 10; ++i) session.tick();
+    EXPECT_EQ(session.phase(), nf::DrillPhase::Attack);
+
+    for (uint32_t i = 0; i < 10; ++i) session.tick();
+    EXPECT_EQ(session.phase(), nf::DrillPhase::Done);
+    EXPECT_TRUE(session.is_over());
+}
+
+TEST(FighterDrillSessionTest, TotalTicksThreePhases) {
+    nf::FighterDrillConfig config;
+    config.population_size = 1;
+    config.tower_count = 0;
+    config.token_count = 0;
+    config.phase_duration_ticks = 10;
+    nf::FighterDrillSession session(config, 42);
+
+    for (uint32_t i = 0; i < 30; ++i) session.tick();
+    EXPECT_TRUE(session.is_over());
+    EXPECT_EQ(session.current_tick(), 30u);
+}
+
+TEST(FighterDrillSessionTest, ExpandPhaseRewardsMovingAway) {
+    nf::FighterDrillConfig config;
+    config.population_size = 2;
+    config.tower_count = 0;
+    config.token_count = 0;
+    config.phase_duration_ticks = 5;
+    nf::FighterDrillSession session(config, 42);
+
+    auto& ship0 = session.ships()[0];
+    auto& ship1 = session.ships()[1];
+
+    float cx = config.world_width / 2.0f;
+    ship0.x = cx + 100.0f;
+    ship0.y = config.world_height / 2.0f;
+    ship0.rotation = std::numbers::pi_v<float> / 2.0f;  // facing right (away)
+
+    ship1.x = cx + 100.0f;
+    ship1.y = config.world_height / 2.0f;
+    ship1.rotation = -std::numbers::pi_v<float> / 2.0f;  // facing left (toward)
+
+    for (int i = 0; i < 5; ++i) {
+        session.set_ship_actions(0, true, false, false, false, false);
+        session.set_ship_actions(1, true, false, false, false, false);
+        session.tick();
+    }
+
+    auto scores = session.get_scores();
+    EXPECT_GT(scores[0], 0.0f);
+    EXPECT_LT(scores[1], 0.0f);
+    EXPECT_GT(scores[0], scores[1]);
+}
+
+TEST(FighterDrillSessionTest, ContractPhaseRewardsMovingToward) {
+    nf::FighterDrillConfig config;
+    config.population_size = 2;
+    config.tower_count = 0;
+    config.token_count = 0;
+    config.phase_duration_ticks = 5;
+    nf::FighterDrillSession session(config, 42);
+
+    for (uint32_t i = 0; i < 5; ++i) session.tick();
+    EXPECT_EQ(session.phase(), nf::DrillPhase::Contract);
+
+    auto& ship0 = session.ships()[0];
+    auto& ship1 = session.ships()[1];
+
+    float cx = config.world_width / 2.0f;
+    ship0.x = cx + 100.0f;
+    ship0.y = config.world_height / 2.0f;
+    ship0.rotation = -std::numbers::pi_v<float> / 2.0f;  // facing left (toward)
+
+    ship1.x = cx + 100.0f;
+    ship1.y = config.world_height / 2.0f;
+    ship1.rotation = std::numbers::pi_v<float> / 2.0f;  // facing right (away)
+
+    float score_before_0 = session.get_scores()[0];
+    float score_before_1 = session.get_scores()[1];
+
+    for (int i = 0; i < 5; ++i) {
+        session.set_ship_actions(0, true, false, false, false, false);
+        session.set_ship_actions(1, true, false, false, false, false);
+        session.tick();
+    }
+
+    auto scores = session.get_scores();
+    float delta_0 = scores[0] - score_before_0;
+    float delta_1 = scores[1] - score_before_1;
+    EXPECT_GT(delta_0, 0.0f);
+    EXPECT_LT(delta_1, 0.0f);
+}

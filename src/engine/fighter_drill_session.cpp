@@ -242,7 +242,52 @@ void FighterDrillSession::resolve_bullet_tower_collisions() {
 }
 
 void FighterDrillSession::compute_phase_scores() {
-    // Implemented in Task 5
+    if (phase_ == DrillPhase::Done) return;
+
+    for (std::size_t i = 0; i < ships_.size(); ++i) {
+        if (!ships_[i].alive) continue;
+
+        float vx = ships_[i].dx;
+        float vy = ships_[i].dy;
+
+        switch (phase_) {
+            case DrillPhase::Expand: {
+                float dir_x = ships_[i].x - squad_center_x_;
+                float dir_y = ships_[i].y - squad_center_y_;
+                float len = std::sqrt(dir_x * dir_x + dir_y * dir_y);
+                if (len > 0.001f) {
+                    dir_x /= len;
+                    dir_y /= len;
+                    scores_[i] += (vx * dir_x + vy * dir_y) * config_.expand_weight;
+                }
+                break;
+            }
+            case DrillPhase::Contract: {
+                float dir_x = squad_center_x_ - ships_[i].x;
+                float dir_y = squad_center_y_ - ships_[i].y;
+                float len = std::sqrt(dir_x * dir_x + dir_y * dir_y);
+                if (len > 0.001f) {
+                    dir_x /= len;
+                    dir_y /= len;
+                    scores_[i] += (vx * dir_x + vy * dir_y) * config_.contract_weight;
+                }
+                break;
+            }
+            case DrillPhase::Attack: {
+                float dir_x = starbase_.x - ships_[i].x;
+                float dir_y = starbase_.y - ships_[i].y;
+                float len = std::sqrt(dir_x * dir_x + dir_y * dir_y);
+                if (len > 0.001f) {
+                    dir_x /= len;
+                    dir_y /= len;
+                    scores_[i] += (vx * dir_x + vy * dir_y) * config_.attack_travel_weight;
+                }
+                break;
+            }
+            case DrillPhase::Done:
+                break;
+        }
+    }
 }
 
 } // namespace neuroflyer
