@@ -1214,6 +1214,14 @@ void VariantViewerScreen::on_draw(
                 state.base_attack_mode = false;
                 state.squad_paired_fighter_name = paired_fighter_name_;
                 state.squad_training_genome_dir = vs_.genome_dir;
+                // Pass selected squad variant name (if any) to seed squad nets
+                if (!squad_variants_.empty() && squad_selected_idx_ >= 0 &&
+                    static_cast<std::size_t>(squad_selected_idx_) < squad_variants_.size()) {
+                    state.squad_variant_name = squad_variants_[
+                        static_cast<std::size_t>(squad_selected_idx_)].name;
+                } else {
+                    state.squad_variant_name.clear();
+                }
                 state.return_to_variant_view = true;
                 ui.push_screen(std::make_unique<ArenaConfigScreen>());
             }
@@ -1232,6 +1240,14 @@ void VariantViewerScreen::on_draw(
                 state.base_attack_mode = true;
                 state.squad_paired_fighter_name = paired_fighter_name_;
                 state.squad_training_genome_dir = vs_.genome_dir;
+                // Pass selected squad variant name (if any) to seed squad nets
+                if (!squad_variants_.empty() && squad_selected_idx_ >= 0 &&
+                    static_cast<std::size_t>(squad_selected_idx_) < squad_variants_.size()) {
+                    state.squad_variant_name = squad_variants_[
+                        static_cast<std::size_t>(squad_selected_idx_)].name;
+                } else {
+                    state.squad_variant_name.clear();
+                }
                 state.return_to_variant_view = true;
                 ui.push_screen(std::make_unique<ArenaConfigScreen>());
             }

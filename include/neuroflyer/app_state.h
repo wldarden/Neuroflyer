@@ -61,6 +61,7 @@ struct AppState {
     bool base_attack_mode = false;
     std::string squad_paired_fighter_name;
     std::string squad_training_genome_dir;
+    std::string squad_variant_name;  // selected squad variant to seed from (empty = random init)
 
     // Data invalidation flags — set by any screen that mutates data,
     // consumed by the screen that owns the cache.

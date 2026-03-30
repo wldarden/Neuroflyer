@@ -81,12 +81,32 @@ void ArenaGameScreen::initialize(AppState& state) {
 
         // Override team population: create squad nets, freeze fighters
         auto fighter_ind = snapshot_to_individual(paired_fighter_snapshot_);
+
+        // Load squad variant if one was selected (seed squad nets from it)
+        const Individual* squad_seed = nullptr;
+        Individual squad_ind;
+        if (!state.squad_variant_name.empty()) {
+            std::string sq_path = squad_genome_dir_ + "/squad/"
+                + state.squad_variant_name + ".bin";
+            try {
+                auto sq_snap = load_snapshot(sq_path);
+                squad_ind = snapshot_to_individual(sq_snap);
+                squad_seed = &squad_ind;
+                std::cout << "Loaded squad variant '" << state.squad_variant_name
+                          << "' to seed population\n";
+            } catch (const std::exception& e) {
+                std::cerr << "Failed to load squad variant: " << e.what() << "\n";
+            }
+        }
+        state.squad_variant_name.clear();  // consume
+
         team_pop_size = 20;
         evo_config_.population_size = team_pop_size;
         team_population_.clear();
         for (std::size_t i = 0; i < team_pop_size; ++i) {
             auto team = TeamIndividual::create(
-                ship_design_, {8, 8}, ntm_config_, leader_config_, state.rng, &fighter_ind);
+                ship_design_, {8, 8}, ntm_config_, leader_config_, state.rng,
+                &fighter_ind, squad_seed);
             team_population_.push_back(std::move(team));
         }
 

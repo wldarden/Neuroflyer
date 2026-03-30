@@ -28,8 +28,10 @@ struct TeamIndividual {
     Individual fighter_individual;   // Fighter net
     float fitness = 0.0f;
 
-    /// Create a random team with NTM + squad leader + fighter nets.
+    /// Create a team with NTM + squad leader + fighter nets.
     /// If variant is non-null, the fighter net is converted from that scroller variant
+    /// instead of being randomly initialized.
+    /// If squad_variant is non-null, the squad leader net is copied from it
     /// instead of being randomly initialized.
     static TeamIndividual create(
         const ShipDesign& fighter_design,
@@ -37,7 +39,8 @@ struct TeamIndividual {
         const NtmNetConfig& ntm_config,
         const SquadLeaderNetConfig& leader_config,
         std::mt19937& rng,
-        const Individual* variant = nullptr);
+        const Individual* variant = nullptr,
+        const Individual* squad_variant = nullptr);
 
     /// Build networks from individuals.
     [[nodiscard]] neuralnet::Network build_ntm_network() const;

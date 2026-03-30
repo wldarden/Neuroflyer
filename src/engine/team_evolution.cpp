@@ -10,7 +10,8 @@ TeamIndividual TeamIndividual::create(
     const NtmNetConfig& ntm_config,
     const SquadLeaderNetConfig& leader_config,
     std::mt19937& rng,
-    const Individual* variant) {
+    const Individual* variant,
+    const Individual* squad_variant) {
 
     TeamIndividual team;
 
@@ -21,12 +22,16 @@ TeamIndividual TeamIndividual::create(
         ntm_config.output_size,
         rng);
 
-    // Squad leader net
-    team.squad_individual = Individual::random(
-        leader_config.input_size,
-        leader_config.hidden_sizes,
-        leader_config.output_size,
-        rng);
+    // Squad leader net: use saved variant if provided, otherwise random
+    if (squad_variant) {
+        team.squad_individual = *squad_variant;
+    } else {
+        team.squad_individual = Individual::random(
+            leader_config.input_size,
+            leader_config.hidden_sizes,
+            leader_config.output_size,
+            rng);
+    }
 
     // Fighter net: uses arena input size (sensors + 6 squad leader inputs + memory)
     if (variant) {
