@@ -18,6 +18,7 @@ add_executable(neuroflyer_tests
     team_evolution_test.cpp
     arena_match_test.cpp
     sector_grid_test.cpp
+    squad_leader_test.cpp
     ../src/engine/game.cpp
     ../src/engine/arena_session.cpp
     ../src/engine/ray.cpp
