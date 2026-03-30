@@ -1,6 +1,7 @@
 #include <neuroflyer/ui/screens/variant_viewer_screen.h>
 #include <neuroflyer/ui/screens/hangar/variant_net_editor_screen.h>
 #include <neuroflyer/ui/screens/arena_config_screen.h>
+#include <neuroflyer/ui/screens/fighter_drill_screen.h>
 #include <neuroflyer/ui/screens/fly_session_screen.h>
 #include <neuroflyer/ui/screens/lineage_tree_screen.h>
 #include <neuroflyer/ui/ui_manager.h>
@@ -629,6 +630,11 @@ VariantViewerScreen::Action VariantViewerScreen::draw_variant_list(
                 ImVec2(BTN_W, BTN_H))) {
             action = Action::ArenaFrom;
         }
+        ImGui::Dummy(ImVec2(0, 3));
+        if (ImGui::Button("Fighter Drill",
+                ImVec2(BTN_W, BTN_H))) {
+            action = Action::FighterDrill;
+        }
 
         ImGui::Dummy(ImVec2(0, 10));
         ImGui::Separator();
@@ -1129,6 +1135,26 @@ void VariantViewerScreen::on_draw(
                     ui.push_screen(std::make_unique<ArenaConfigScreen>());
                 } catch (const std::exception& e) {
                     std::cerr << "ArenaFrom failed: "
+                              << e.what() << "\n";
+                }
+            }
+            break;
+        }
+
+        case Action::FighterDrill: {
+            if (!vs_.variants.empty() &&
+                vs_.selected_idx >= 0 &&
+                static_cast<std::size_t>(vs_.selected_idx)
+                    < vs_.variants.size()) {
+                const auto& sel = vs_.variants[
+                    static_cast<std::size_t>(vs_.selected_idx)];
+                try {
+                    auto snap = load_snapshot(variant_path(sel));
+                    state.return_to_variant_view = true;
+                    ui.push_screen(std::make_unique<FighterDrillScreen>(
+                        std::move(snap), vs_.genome_dir, sel.name));
+                } catch (const std::exception& e) {
+                    std::cerr << "FighterDrill failed: "
                               << e.what() << "\n";
                 }
             }

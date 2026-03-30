@@ -72,6 +72,7 @@ private:
     // Actions from variant list
     enum class Action {
         Stay, Back, TrainFresh, TrainFrom, ArenaFresh, ArenaFrom,
+        FighterDrill,
         ViewNet, TestBench, PromoteToGenome, DeleteVariant,
         LineageTree,
         // Squad actions
