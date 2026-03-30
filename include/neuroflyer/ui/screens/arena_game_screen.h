@@ -7,6 +7,7 @@
 #include <neuroflyer/camera.h>
 #include <neuroflyer/evolution.h>
 #include <neuroflyer/snapshot.h>
+#include <neuroflyer/squad_leader.h>
 #include <neuroflyer/team_evolution.h>
 #include <neuroflyer/ui/ui_screen.h>
 
@@ -41,13 +42,14 @@ private:
 
     // Team-based evolution state
     std::vector<TeamIndividual> team_population_;
-    SquadNetConfig squad_config_;
+    NtmNetConfig ntm_config_;
+    SquadLeaderNetConfig leader_config_;
 
     // Per-match compiled state (rebuilt each round)
-    std::vector<neuralnet::Network> squad_nets_;
+    std::vector<neuralnet::Network> ntm_nets_;
+    std::vector<neuralnet::Network> leader_nets_;
     std::vector<neuralnet::Network> fighter_nets_;
     std::vector<std::vector<float>> recurrent_states_;
-    std::vector<std::vector<float>> team_broadcasts_;
     std::vector<int> ship_teams_;
     std::vector<float> team_fitness_;
     std::vector<std::size_t> current_team_indices_;

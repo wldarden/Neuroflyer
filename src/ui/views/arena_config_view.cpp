@@ -32,10 +32,8 @@ bool draw_arena_config_view(ArenaConfig& config) {
         config.fighters_per_squad = static_cast<std::size_t>(fighters_per_squad);
     }
 
-    int squad_broadcast_signals = static_cast<int>(config.squad_broadcast_signals);
-    if (ui::input_int("Squad Broadcast Signals", &squad_broadcast_signals, 2, 8)) {
-        config.squad_broadcast_signals = static_cast<std::size_t>(squad_broadcast_signals);
-    }
+    ImGui::TextDisabled("Squad Leader Fighter Inputs: %zu",
+        ArenaConfig::squad_leader_fighter_inputs);
 
     ImGui::TextDisabled("Population: %zu ships",
         config.population_size());

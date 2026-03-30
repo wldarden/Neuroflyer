@@ -1,5 +1,7 @@
 #include <neuroflyer/arena_match.h>
+#include <neuroflyer/sector_grid.h>
 #include <neuroflyer/sensor_engine.h>
+#include <neuroflyer/squad_leader.h>
 
 #include <cassert>
 #include <cmath>
@@ -21,14 +23,17 @@ ArenaMatchResult run_arena_match(
     // (a) Create arena session
     ArenaSession arena(arena_config, seed);
 
-    // (b) Compile networks: one squad net + one fighter net per team
-    std::vector<neuralnet::Network> squad_nets;
+    // (b) Compile networks: NTM + squad leader + fighter per team
+    std::vector<neuralnet::Network> ntm_nets;
+    std::vector<neuralnet::Network> leader_nets;
     std::vector<neuralnet::Network> fighter_nets;
-    squad_nets.reserve(arena_config.num_teams);
+    ntm_nets.reserve(arena_config.num_teams);
+    leader_nets.reserve(arena_config.num_teams);
     fighter_nets.reserve(arena_config.num_teams);
 
     for (std::size_t t = 0; t < arena_config.num_teams; ++t) {
-        squad_nets.push_back(teams[t].build_squad_network());
+        ntm_nets.push_back(teams[t].build_ntm_network());
+        leader_nets.push_back(teams[t].build_squad_network());
         fighter_nets.push_back(teams[t].build_fighter_network());
     }
 
@@ -45,42 +50,73 @@ ArenaMatchResult run_arena_match(
 
     // (e) Main loop
     while (!arena.is_over()) {
-        float time_progress = static_cast<float>(arena.current_tick()) /
-                              static_cast<float>(arena_config.time_limit_ticks);
+        // Build sector grid for this tick
+        SectorGrid grid(arena_config.world_width, arena_config.world_height,
+                        arena_config.sector_size);
+        // Insert alive ships (IDs 0..total_ships-1)
+        for (std::size_t i = 0; i < total_ships; ++i) {
+            if (arena.ships()[i].alive) {
+                grid.insert(i, arena.ships()[i].x, arena.ships()[i].y);
+            }
+        }
+        // Insert bases (IDs total_ships..total_ships+bases.size()-1)
+        for (std::size_t b = 0; b < arena.bases().size(); ++b) {
+            if (arena.bases()[b].alive()) {
+                grid.insert(total_ships + b, arena.bases()[b].x, arena.bases()[b].y);
+            }
+        }
 
-        // For each team: build squad net input, run squad net -> broadcast signals
-        std::vector<std::vector<float>> broadcast_signals(arena_config.num_teams);
+        // Per team: run NTM + squad leader -> SquadLeaderOrder
+        std::vector<SquadLeaderOrder> team_orders(arena_config.num_teams);
+        std::vector<float> squad_center_xs(arena_config.num_teams, 0.0f);
+        std::vector<float> squad_center_ys(arena_config.num_teams, 0.0f);
 
         for (std::size_t t = 0; t < arena_config.num_teams; ++t) {
             int team = static_cast<int>(t);
-
-            // Build squad net input from squad stats (8 floats)
             auto stats = arena.compute_squad_stats(team, 0);
+            squad_center_xs[t] = stats.centroid_x;
+            squad_center_ys[t] = stats.centroid_y;
 
-            // Find own base HP and enemy base HP
+            auto threats = gather_near_threats(
+                grid, stats.centroid_x, stats.centroid_y,
+                arena_config.ntm_sector_radius, team,
+                arena.ships(), ship_teams, arena.bases());
+
+            auto ntm = run_ntm_threat_selection(
+                ntm_nets[t], stats.centroid_x, stats.centroid_y,
+                stats.alive_fraction, threats,
+                arena_config.world_width, arena_config.world_height);
+
+            // Find bases
+            float own_base_x = arena.bases()[t].x, own_base_y = arena.bases()[t].y;
             float own_base_hp = arena.bases()[t].hp_normalized();
-            float enemy_base_hp = 0.0f;
+            float enemy_base_x = 0, enemy_base_y = 0;
+            float min_dist_sq = std::numeric_limits<float>::max();
             for (const auto& base : arena.bases()) {
-                if (base.team_id != team) {
-                    enemy_base_hp = base.hp_normalized();
-                    break;  // first non-team base
-                }
+                if (base.team_id == team) continue;
+                float dx = stats.centroid_x - base.x, dy = stats.centroid_y - base.y;
+                float dsq = dx * dx + dy * dy;
+                if (dsq < min_dist_sq) { min_dist_sq = dsq; enemy_base_x = base.x; enemy_base_y = base.y; }
             }
 
-            std::vector<float> squad_input = {
-                stats.alive_fraction,
-                stats.avg_dist_to_enemy_base,
-                stats.avg_dist_to_home,
-                stats.centroid_dir_sin,
-                stats.centroid_dir_cos,
-                own_base_hp,
-                enemy_base_hp,
-                time_progress
-            };
+            // Compute squad leader inputs
+            float world_diag = std::sqrt(arena_config.world_width * arena_config.world_width +
+                                          arena_config.world_height * arena_config.world_height);
+            float home_dx = own_base_x - stats.centroid_x, home_dy = own_base_y - stats.centroid_y;
+            float home_dist_raw = std::sqrt(home_dx * home_dx + home_dy * home_dy);
+            float home_distance = home_dist_raw / world_diag;
+            float home_heading = (home_dist_raw > 1e-6f)
+                ? std::atan2(home_dx / home_dist_raw, home_dy / home_dist_raw) : 0.0f;
+            float cmd_dx = enemy_base_x - stats.centroid_x, cmd_dy = enemy_base_y - stats.centroid_y;
+            float cmd_dist_raw = std::sqrt(cmd_dx * cmd_dx + cmd_dy * cmd_dy);
+            float cmd_target_heading = (cmd_dist_raw > 1e-6f)
+                ? std::atan2(cmd_dx / cmd_dist_raw, cmd_dy / cmd_dist_raw) : 0.0f;
+            float cmd_target_distance = cmd_dist_raw / world_diag;
 
-            // Run squad net
-            broadcast_signals[t] = squad_nets[t].forward(
-                std::span<const float>(squad_input));
+            team_orders[t] = run_squad_leader(
+                leader_nets[t], stats.alive_fraction, home_distance, home_heading,
+                own_base_hp, stats.squad_spacing, cmd_target_heading, cmd_target_distance,
+                ntm, own_base_x, own_base_y, enemy_base_x, enemy_base_y);
         }
 
         // For each alive ship: build input, run fighter net, decode output, set actions
@@ -122,6 +158,13 @@ ArenaMatchResult run_arena_match(
 
             float own_base_hp = arena.bases()[t].hp_normalized();
 
+            // Compute squad leader fighter inputs
+            auto sl_inputs = compute_squad_leader_fighter_inputs(
+                arena.ships()[i].x, arena.ships()[i].y,
+                team_orders[t],
+                squad_center_xs[t], squad_center_ys[t],
+                arena_config.world_width, arena_config.world_height);
+
             // Build ArenaQueryContext
             ArenaQueryContext ctx;
             ctx.ship_x = arena.ships()[i].x;
@@ -143,7 +186,9 @@ ArenaMatchResult run_arena_match(
                 target_dr.dir_sin, target_dr.dir_cos, target_dr.range,
                 home_dr.dir_sin, home_dr.dir_cos, home_dr.range,
                 own_base_hp,
-                broadcast_signals[t],
+                sl_inputs.squad_target_heading, sl_inputs.squad_target_distance,
+                sl_inputs.squad_center_heading, sl_inputs.squad_center_distance,
+                sl_inputs.aggression, sl_inputs.spacing,
                 recurrent_states[i]);
 
             // Forward fighter net
