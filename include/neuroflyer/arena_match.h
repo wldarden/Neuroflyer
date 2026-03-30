@@ -22,7 +22,6 @@ struct ArenaMatchResult {
 [[nodiscard]] ArenaMatchResult run_arena_match(
     const ArenaConfig& arena_config,
     const ShipDesign& fighter_design,
-    const SquadNetConfig& squad_config,
     const std::vector<TeamIndividual>& teams,
     uint32_t seed);
 

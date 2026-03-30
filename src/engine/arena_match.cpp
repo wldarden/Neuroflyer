@@ -10,12 +10,10 @@ namespace neuroflyer {
 ArenaMatchResult run_arena_match(
     const ArenaConfig& arena_config,
     const ShipDesign& fighter_design,
-    const SquadNetConfig& squad_config,
     const std::vector<TeamIndividual>& teams,
     uint32_t seed) {
 
     assert(teams.size() == arena_config.num_teams);
-    (void)squad_config;  // Config is baked into TeamIndividual's topology
 
     ArenaMatchResult result;
     result.team_scores.resize(arena_config.num_teams, 0.0f);
