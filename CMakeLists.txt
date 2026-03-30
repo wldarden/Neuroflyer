@@ -80,6 +80,7 @@ add_executable(neuroflyer
     src/engine/arena_match.cpp
     src/engine/sector_grid.cpp
     src/engine/squad_leader.cpp
+    src/engine/fighter_drill_session.cpp
     src/engine/paths.cpp
 
     # UI — SDL/ImGui rendering and interaction
@@ -114,6 +115,7 @@ add_executable(neuroflyer
     src/ui/screens/arena/arena_config_screen.cpp
     src/ui/screens/arena/arena_game_screen.cpp
     src/ui/screens/arena/arena_pause_screen.cpp
+    src/ui/screens/game/fighter_drill_screen.cpp
     src/ui/screens/analysis/analysis.cpp
     src/ui/views/arena_config_view.cpp
     src/ui/views/arena_game_view.cpp
