@@ -69,6 +69,9 @@ private:
     NetViewerViewState net_viewer_state_;
     std::vector<float> last_input_;
 
+    // All ships on team 0 (no inter-fighter hostility)
+    std::vector<int> drill_ship_teams_;
+
     // RNG for session seeds
     std::mt19937 rng_;
 };

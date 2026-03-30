@@ -99,10 +99,6 @@ const char* phase_name(DrillPhase phase) {
     return "?";
 }
 
-} // anonymous namespace
-
-namespace {
-
 const char* camera_mode_str(int mode) {
     switch (mode) {
     case 0: return "SWARM";
@@ -170,6 +166,9 @@ void FighterDrillScreen::initialize(AppState& state) {
     recurrent_states_.assign(
         population_.size(),
         std::vector<float>(ship_design_.memory_slots, 0.0f));
+
+    // All ships on same team for sensor queries
+    drill_ship_teams_.assign(population_.size(), 0);
 
     // Create first session
     uint32_t seed = static_cast<uint32_t>(rng_());
@@ -320,7 +319,6 @@ void FighterDrillScreen::run_tick() {
         }
 
         // Build arena sensor input context
-        // The drill world has no enemy ships or teams — use empty ship_teams
         ArenaQueryContext ctx;
         ctx.ship_x = ships[i].x;
         ctx.ship_y = ships[i].y;
@@ -332,9 +330,8 @@ void FighterDrillScreen::run_tick() {
         ctx.towers = session_->towers();
         ctx.tokens = session_->tokens();
         ctx.ships = session_->ships();
-        // All ships on same team (0) — no friendly/enemy distinction needed
-        static const std::vector<int> empty_teams;
-        ctx.ship_teams = std::span<const int>();
+        // All ships on same team (0) — they see each other as friendly
+        ctx.ship_teams = drill_ship_teams_;
         ctx.bullets = session_->bullets();
 
         auto input = build_arena_ship_input(
