@@ -1,4 +1,5 @@
 #include <neuroflyer/fighter_drill_session.h>
+#include <neuroflyer/collision.h>
 
 #include <algorithm>
 #include <cmath>
@@ -79,7 +80,124 @@ void FighterDrillSession::set_ship_actions(
 }
 
 void FighterDrillSession::tick() {
-    // Stub — implemented in Task 3
+    if (phase_ == DrillPhase::Done) return;
+
+    // 1. Update ship positions
+    for (auto& ship : ships_) {
+        if (!ship.alive) continue;
+        ship.x += ship.dx;
+        ship.y += ship.dy;
+    }
+
+    // 2. Apply boundary wrapping (toroidal)
+    apply_boundary_rules();
+
+    // 3. Spawn bullets from ships that want to shoot
+    spawn_bullets_from_ships();
+
+    // 4. Update bullets (directional movement + despawn at max_range)
+    update_bullets();
+
+    // 5. Collision resolution
+    resolve_ship_tower_collisions();
+    resolve_ship_token_collisions();
+    resolve_bullet_starbase_collisions();
+    resolve_bullet_tower_collisions();
+
+    // 6. Phase-based movement scoring
+    compute_phase_scores();
+
+    // 7. Decrement shoot cooldowns
+    for (auto& ship : ships_) {
+        if (ship.shoot_cooldown > 0) --ship.shoot_cooldown;
+    }
+
+    // 8. Clean up dead bullets
+    std::erase_if(bullets_, [](const Bullet& b) { return !b.alive; });
+
+    // 9. Advance tick counters
+    ++tick_count_;
+    ++phase_tick_;
+
+    // 10. Phase transitions
+    if (phase_tick_ >= config_.phase_duration_ticks) {
+        phase_tick_ = 0;
+        switch (phase_) {
+            case DrillPhase::Expand:   phase_ = DrillPhase::Contract; break;
+            case DrillPhase::Contract: phase_ = DrillPhase::Attack;   break;
+            case DrillPhase::Attack:   phase_ = DrillPhase::Done;     break;
+            case DrillPhase::Done:     break;
+        }
+    }
+}
+
+void FighterDrillSession::apply_boundary_rules() {
+    for (auto& ship : ships_) {
+        if (!ship.alive) continue;
+
+        if (config_.wrap_ew) {
+            if (ship.x < 0.0f) ship.x += config_.world_width;
+            else if (ship.x > config_.world_width) ship.x -= config_.world_width;
+        } else {
+            ship.x = std::clamp(ship.x, 0.0f, config_.world_width);
+        }
+
+        if (config_.wrap_ns) {
+            if (ship.y < 0.0f) ship.y += config_.world_height;
+            else if (ship.y > config_.world_height) ship.y -= config_.world_height;
+        } else {
+            ship.y = std::clamp(ship.y, 0.0f, config_.world_height);
+        }
+    }
+}
+
+void FighterDrillSession::spawn_bullets_from_ships() {
+    for (std::size_t i = 0; i < ships_.size(); ++i) {
+        auto& ship = ships_[i];
+        if (!ship.alive) continue;
+        if (ship.wants_shoot && ship.shoot_cooldown <= 0) {
+            Bullet b;
+            float fx = std::sin(ship.rotation);
+            float fy = -std::cos(ship.rotation);
+            b.x = ship.x + fx * Triangle::SIZE;
+            b.y = ship.y + fy * Triangle::SIZE;
+            b.dir_x = fx;
+            b.dir_y = fy;
+            b.alive = true;
+            b.owner_index = static_cast<int>(i);
+            b.distance_traveled = 0.0f;
+            b.max_range = config_.bullet_max_range;
+            bullets_.push_back(b);
+            ship.shoot_cooldown = ship.fire_cooldown;
+        }
+    }
+}
+
+void FighterDrillSession::update_bullets() {
+    for (auto& b : bullets_) {
+        if (!b.alive) continue;
+        b.update_directional();
+    }
+}
+
+void FighterDrillSession::resolve_ship_tower_collisions() {
+    // Implemented in Task 4
+}
+
+void FighterDrillSession::resolve_ship_token_collisions() {
+    // Implemented in Task 4
+}
+
+void FighterDrillSession::resolve_bullet_starbase_collisions() {
+    // Implemented in Task 4
+}
+
+void FighterDrillSession::resolve_bullet_tower_collisions() {
+    // Implemented in Task 4
+}
+
+void FighterDrillSession::compute_phase_scores() {
+    // Implemented in Task 5
 }
 
 } // namespace neuroflyer

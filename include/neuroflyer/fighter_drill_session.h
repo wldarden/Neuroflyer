@@ -76,6 +76,15 @@ private:
     void spawn_obstacles();
     void spawn_starbase();
 
+    void apply_boundary_rules();
+    void spawn_bullets_from_ships();
+    void update_bullets();
+    void resolve_ship_tower_collisions();
+    void resolve_ship_token_collisions();
+    void resolve_bullet_starbase_collisions();
+    void resolve_bullet_tower_collisions();
+    void compute_phase_scores();
+
     FighterDrillConfig config_;
     std::vector<Triangle> ships_;
     std::vector<Tower> towers_;

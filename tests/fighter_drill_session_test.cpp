@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <numbers>
 
 namespace nf = neuroflyer;
 
@@ -82,4 +83,75 @@ TEST(FighterDrillSessionTest, ScoresInitializedToZero) {
     for (float s : scores) {
         EXPECT_FLOAT_EQ(s, 0.0f);
     }
+}
+
+// ── Task 3 tests ────────────────────────────────────────────────────────────
+
+TEST(FighterDrillSessionTest, ShipMovesOnThrust) {
+    nf::FighterDrillConfig config;
+    config.population_size = 1;
+    config.tower_count = 0;
+    config.token_count = 0;
+    nf::FighterDrillSession session(config, 42);
+
+    auto& ship = session.ships()[0];
+    ship.rotation = 0.0f;  // facing up
+    float start_y = ship.y;
+
+    session.set_ship_actions(0, true, false, false, false, false);
+    session.tick();
+
+    EXPECT_LT(session.ships()[0].y, start_y);  // moved up (negative Y)
+}
+
+TEST(FighterDrillSessionTest, WorldWrapping) {
+    nf::FighterDrillConfig config;
+    config.world_width = 100.0f;
+    config.world_height = 100.0f;
+    config.population_size = 1;
+    config.tower_count = 0;
+    config.token_count = 0;
+    nf::FighterDrillSession session(config, 42);
+
+    auto& ship = session.ships()[0];
+    ship.x = 99.0f;
+    ship.y = 50.0f;
+    ship.rotation = std::numbers::pi_v<float> / 2.0f;  // facing right
+
+    session.set_ship_actions(0, true, false, false, false, false);
+    session.tick();
+
+    EXPECT_LT(session.ships()[0].x, 50.0f);  // wrapped
+}
+
+TEST(FighterDrillSessionTest, BulletSpawnsOnShoot) {
+    nf::FighterDrillConfig config;
+    config.population_size = 1;
+    config.tower_count = 0;
+    config.token_count = 0;
+    nf::FighterDrillSession session(config, 42);
+
+    EXPECT_EQ(session.bullets().size(), 0u);
+    session.set_ship_actions(0, false, false, false, false, true);
+    session.tick();
+    EXPECT_EQ(session.bullets().size(), 1u);
+    EXPECT_TRUE(session.bullets()[0].alive);
+}
+
+TEST(FighterDrillSessionTest, BulletDiesAtMaxRange) {
+    nf::FighterDrillConfig config;
+    config.population_size = 1;
+    config.tower_count = 0;
+    config.token_count = 0;
+    config.bullet_max_range = 50.0f;
+    config.world_width = 10000.0f;
+    config.world_height = 10000.0f;
+    nf::FighterDrillSession session(config, 42);
+
+    session.set_ship_actions(0, false, false, false, false, true);
+    session.tick();
+    EXPECT_EQ(session.bullets().size(), 1u);
+
+    for (int i = 0; i < 10; ++i) session.tick();
+    EXPECT_EQ(session.bullets().size(), 0u);
 }
