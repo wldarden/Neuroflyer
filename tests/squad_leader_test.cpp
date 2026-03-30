@@ -102,7 +102,7 @@ TEST(SquadLeader, GatherNearThreatsIgnoresDistantEnemies) {
 
 TEST(SquadLeader, NtmReturnsInactiveWhenNoThreats) {
     std::mt19937 rng(42);
-    auto ind = Individual::random(6, {4}, 1, rng);
+    auto ind = Individual::random(7, {4}, 1, rng);
     auto net = ind.build_network();
 
     std::vector<NearThreat> empty_threats;
@@ -113,7 +113,7 @@ TEST(SquadLeader, NtmReturnsInactiveWhenNoThreats) {
 
 TEST(SquadLeader, NtmSelectsHighestThreat) {
     std::mt19937 rng(42);
-    auto ind = Individual::random(6, {4}, 1, rng);
+    auto ind = Individual::random(7, {4}, 1, rng);
     auto net = ind.build_network();
 
     // Two threats at different positions
@@ -140,28 +140,29 @@ TEST(SquadLeader, NtmSelectsHighestThreat) {
 
 TEST(SquadLeader, RunSquadLeaderReturnsValidOrder) {
     std::mt19937 rng(123);
-    // Leader net: 11 inputs, hidden {6}, 5 outputs
-    auto ind = Individual::random(11, {6}, 5, rng);
+    // Leader net: 14 inputs, hidden {6}, 5 outputs
+    auto ind = Individual::random(14, {6}, 5, rng);
     auto net = ind.build_network();
 
     NtmResult ntm;
     ntm.active = true;
     ntm.threat_score = 0.8f;
     ntm.target_x = 3000; ntm.target_y = 4000;
-    ntm.heading = 0.5f; ntm.distance = 0.3f;
+    ntm.heading_sin = 0.5f; ntm.heading_cos = 0.866f;
+    ntm.distance = 0.3f;
 
     auto order = run_squad_leader(
         net,
-        0.9f,   // squad_health
-        0.2f,   // home_distance
-        0.5f,   // home_heading
-        1.0f,   // home_health
-        0.5f,   // squad_spacing
-        0.3f,   // commander_target_heading
-        0.4f,   // commander_target_distance
+        0.9f,            // squad_health
+        0.2f, 0.98f,     // home_heading_sin, home_heading_cos
+        0.5f,            // home_distance
+        1.0f,            // home_health
+        0.5f,            // squad_spacing
+        0.3f, 0.95f,     // cmd_target_heading_sin, cmd_target_heading_cos
+        0.4f,            // cmd_target_distance
         ntm,
-        1000, 1000,  // own base
-        9000, 9000); // enemy base
+        1000, 1000,      // own base
+        9000, 9000);     // enemy base
 
     // Tactical and spacing are valid enums
     EXPECT_TRUE(
@@ -189,15 +190,21 @@ TEST(SquadLeader, RunSquadLeaderNoThreatFallsBackToStarbase) {
     bool found_attack_ship = false;
     for (int seed = 0; seed < 200; ++seed) {
         std::mt19937 rng(seed);
-        auto ind = Individual::random(11, {6}, 5, rng);
+        auto ind = Individual::random(14, {6}, 5, rng);
         auto net = ind.build_network();
 
         auto order = run_squad_leader(
             net,
-            0.5f, 0.5f, 0.0f, 0.5f, 0.5f, 0.0f, 0.5f,
+            0.5f,            // squad_health
+            0.0f, 1.0f,     // home_heading_sin, home_heading_cos
+            0.5f,            // home_distance
+            0.5f,            // home_health
+            0.5f,            // squad_spacing
+            0.0f, 1.0f,     // cmd_heading_sin, cmd_heading_cos
+            0.5f,            // cmd_target_distance
             ntm_inactive,
-            1000, 1000,   // own base
-            9000, 9000);  // enemy base
+            1000, 1000,      // own base
+            9000, 9000);     // enemy base
 
         if (order.tactical == TacticalOrder::AttackShip) {
             // Fallback: should target enemy starbase since no NTM active
@@ -231,7 +238,7 @@ TEST(SquadLeader, FighterInputsAttackHasPositiveAggression) {
     order.target_x = 5000; order.target_y = 5000;
 
     auto inputs = compute_squad_leader_fighter_inputs(
-        100, 100, order, 500, 500, 10000, 10000);
+        100, 100, 0.0f, order, 500, 500, 10000, 10000);
 
     EXPECT_FLOAT_EQ(inputs.aggression, 1.0f);
 }
@@ -243,7 +250,7 @@ TEST(SquadLeader, FighterInputsDefendHasNegativeAggression) {
     order.target_x = 1000; order.target_y = 1000;
 
     auto inputs = compute_squad_leader_fighter_inputs(
-        100, 100, order, 500, 500, 10000, 10000);
+        100, 100, 0.0f, order, 500, 500, 10000, 10000);
 
     EXPECT_FLOAT_EQ(inputs.aggression, -1.0f);
 }
@@ -257,7 +264,7 @@ TEST(SquadLeader, FighterInputsSquadCenterDistanceZeroWhenAtCenter) {
     // Fighter is exactly at the squad center
     float cx = 3000, cy = 3000;
     auto inputs = compute_squad_leader_fighter_inputs(
-        cx, cy, order, cx, cy, 10000, 10000);
+        cx, cy, 0.0f, order, cx, cy, 10000, 10000);
 
     EXPECT_FLOAT_EQ(inputs.squad_center_distance, 0.0f);
 }

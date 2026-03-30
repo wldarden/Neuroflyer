@@ -108,9 +108,9 @@ TEST(ArenaSensorTest, ArenaInputSize) {
         {nf::SensorType::Raycast, 0.5f, 300.0f, 0.0f, false, 2},  // sight: 1 val
     };
     design.memory_slots = 4;
-    auto size = nf::compute_arena_input_size(design, 6);
-    // 5 + 1 (sensors) + 3 (pos) + 7 (nav) + 6 (squad leader) + 4 (memory) = 26
-    EXPECT_EQ(size, 26u);
+    auto size = nf::compute_arena_input_size(design);
+    // 5 + 1 (sensors) + 6 (squad leader) + 4 (memory) = 16
+    EXPECT_EQ(size, 16u);
 }
 
 TEST(ArenaSensorTest, BuildArenaShipInputSize) {
@@ -133,15 +133,12 @@ TEST(ArenaSensorTest, BuildArenaShipInputSize) {
 
     auto input = nf::build_arena_ship_input(
         design, ctx,
-        0.0f, 1.0f, 0.5f,     // target dir+range
-        0.0f, -1.0f, 0.3f,    // home dir+range
-        0.8f,                   // base hp
         0.5f, 0.4f,            // squad_target heading/dist
         0.1f, 0.2f,            // squad_center heading/dist
         1.0f, -1.0f,           // aggression, spacing
         memory);
 
-    // 5 (sensor) + 3 (pos) + 7 (nav) + 6 (squad leader) + 2 (memory) = 23
-    std::size_t expected = nf::compute_arena_input_size(design, 6);
+    // 5 (sensor) + 6 (squad leader) + 2 (memory) = 13
+    std::size_t expected = nf::compute_arena_input_size(design);
     EXPECT_EQ(input.size(), expected);
 }

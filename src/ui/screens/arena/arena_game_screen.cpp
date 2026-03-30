@@ -274,17 +274,19 @@ void ArenaGameScreen::tick_arena(AppState& /*state*/) {
         float home_dx = own_base_x - stats.centroid_x, home_dy = own_base_y - stats.centroid_y;
         float home_dist_raw = std::sqrt(home_dx * home_dx + home_dy * home_dy);
         float home_distance = home_dist_raw / world_diag;
-        float home_heading = (home_dist_raw > 1e-6f)
-            ? std::atan2(home_dx / home_dist_raw, home_dy / home_dist_raw) : 0.0f;
+        float home_heading_sin = (home_dist_raw > 1e-6f) ? home_dx / home_dist_raw : 0.0f;
+        float home_heading_cos = (home_dist_raw > 1e-6f) ? home_dy / home_dist_raw : 0.0f;
         float cmd_dx = enemy_base_x - stats.centroid_x, cmd_dy = enemy_base_y - stats.centroid_y;
         float cmd_dist_raw = std::sqrt(cmd_dx * cmd_dx + cmd_dy * cmd_dy);
-        float cmd_target_heading = (cmd_dist_raw > 1e-6f)
-            ? std::atan2(cmd_dx / cmd_dist_raw, cmd_dy / cmd_dist_raw) : 0.0f;
+        float cmd_heading_sin = (cmd_dist_raw > 1e-6f) ? cmd_dx / cmd_dist_raw : 0.0f;
+        float cmd_heading_cos = (cmd_dist_raw > 1e-6f) ? cmd_dy / cmd_dist_raw : 0.0f;
         float cmd_target_distance = cmd_dist_raw / world_diag;
 
         team_orders[t] = run_squad_leader(
-            leader_nets_[t], stats.alive_fraction, home_distance, home_heading,
-            own_base_hp, stats.squad_spacing, cmd_target_heading, cmd_target_distance,
+            leader_nets_[t], stats.alive_fraction,
+            home_heading_sin, home_heading_cos, home_distance,
+            own_base_hp, stats.squad_spacing,
+            cmd_heading_sin, cmd_heading_cos, cmd_target_distance,
             ntm, own_base_x, own_base_y, enemy_base_x, enemy_base_y);
     }
 
@@ -295,36 +297,9 @@ void ArenaGameScreen::tick_arena(AppState& /*state*/) {
         int team = ship_teams_[i];
         auto t = static_cast<std::size_t>(team);
 
-        // Find target (nearest enemy base) and home base
-        float target_x = 0, target_y = 0;
-        float min_dist_sq = std::numeric_limits<float>::max();
-        for (const auto& base : arena_->bases()) {
-            if (base.team_id == team) continue;
-            float dx = base.x - arena_->ships()[i].x;
-            float dy = base.y - arena_->ships()[i].y;
-            float dist_sq = dx * dx + dy * dy;
-            if (dist_sq < min_dist_sq) {
-                min_dist_sq = dist_sq;
-                target_x = base.x;
-                target_y = base.y;
-            }
-        }
-
-        float home_x = arena_->bases()[t].x;
-        float home_y = arena_->bases()[t].y;
-        float own_base_hp = arena_->bases()[t].hp_normalized();
-
-        auto target_dr = compute_dir_range(
-            arena_->ships()[i].x, arena_->ships()[i].y,
-            target_x, target_y,
-            config_.world_width, config_.world_height);
-        auto home_dr = compute_dir_range(
-            arena_->ships()[i].x, arena_->ships()[i].y,
-            home_x, home_y,
-            config_.world_width, config_.world_height);
-
         auto sl_inputs = compute_squad_leader_fighter_inputs(
             arena_->ships()[i].x, arena_->ships()[i].y,
+            arena_->ships()[i].rotation,
             team_orders[t],
             squad_center_xs[t], squad_center_ys[t],
             config_.world_width, config_.world_height);
@@ -345,9 +320,6 @@ void ArenaGameScreen::tick_arena(AppState& /*state*/) {
 
         auto input = build_arena_ship_input(
             ship_design_, ctx,
-            target_dr.dir_sin, target_dr.dir_cos, target_dr.range,
-            home_dr.dir_sin, home_dr.dir_cos, home_dr.range,
-            own_base_hp,
             sl_inputs.squad_target_heading, sl_inputs.squad_target_distance,
             sl_inputs.squad_center_heading, sl_inputs.squad_center_distance,
             sl_inputs.aggression, sl_inputs.spacing,

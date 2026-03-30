@@ -26,19 +26,19 @@ TEST(TeamEvolution, CreateTeamIndividual) {
 
     auto team = TeamIndividual::create(design, {6}, ntm_cfg, leader_cfg, rng);
 
-    // NTM net: 6 -> [4] -> 1
+    // NTM net: 7 -> [4] -> 1
     auto ntm_net = team.build_ntm_network();
-    EXPECT_EQ(ntm_net.input_size(), 6u);
+    EXPECT_EQ(ntm_net.input_size(), 7u);
     EXPECT_EQ(ntm_net.output_size(), 1u);
 
-    // Squad leader: 11 -> [8] -> 5
+    // Squad leader: 14 -> [8] -> 5
     auto leader_net = team.build_squad_network();
-    EXPECT_EQ(leader_net.input_size(), 11u);
+    EXPECT_EQ(leader_net.input_size(), 14u);
     EXPECT_EQ(leader_net.output_size(), 5u);
 
-    // Fighter: sensors(5) + pos(3) + nav(7) + squad_leader(6) + mem(2)
+    // Fighter: sensors(5) + squad_leader(6) + mem(2) = 13
     auto fighter_net = team.build_fighter_network();
-    EXPECT_EQ(fighter_net.input_size(), 5u + 3 + 7 + 6 + 2);
+    EXPECT_EQ(fighter_net.input_size(), 5u + 6 + 2);
     EXPECT_EQ(fighter_net.output_size(), 5u + 2);  // 5 actions + 2 memory
 }
 
@@ -74,8 +74,8 @@ TEST(TeamEvolution, EvolveTeamPopulation) {
         auto ntm = t.build_ntm_network();
         auto leader = t.build_squad_network();
         auto fighter = t.build_fighter_network();
-        EXPECT_EQ(ntm.input_size(), 6u);
-        EXPECT_EQ(leader.input_size(), 11u);
+        EXPECT_EQ(ntm.input_size(), 7u);
+        EXPECT_EQ(leader.input_size(), 14u);
         EXPECT_GT(fighter.input_size(), 0u);
     }
 }
