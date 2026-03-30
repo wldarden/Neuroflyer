@@ -116,8 +116,8 @@ void FighterDrillSession::tick() {
     std::erase_if(bullets_, [](const Bullet& b) { return !b.alive; });
 
     // 9. Advance tick counters
-    ++tick_count_;
     ++phase_tick_;
+    ++tick_count_;
 
     // 10. Phase transitions
     if (phase_tick_ >= config_.phase_duration_ticks) {
@@ -181,12 +181,12 @@ void FighterDrillSession::update_bullets() {
 }
 
 void FighterDrillSession::resolve_ship_tower_collisions() {
-    for (auto& ship : ships_) {
-        if (!ship.alive) continue;
+    for (std::size_t i = 0; i < ships_.size(); ++i) {
+        if (!ships_[i].alive) continue;
         for (const auto& tower : towers_) {
             if (!tower.alive) continue;
-            if (triangle_circle_collision_rotated(ship, tower.x, tower.y, tower.radius)) {
-                ship.alive = false;
+            if (triangle_circle_collision_rotated(ships_[i], tower.x, tower.y, tower.radius)) {
+                ships_[i].alive = false;
                 break;
             }
         }
@@ -198,9 +198,11 @@ void FighterDrillSession::resolve_ship_token_collisions() {
         if (!ships_[i].alive) continue;
         for (auto& tok : tokens_) {
             if (!tok.alive) continue;
-            float dx = ships_[i].x - tok.x;
-            float dy = ships_[i].y - tok.y;
-            float dist_sq = dx * dx + dy * dy;
+            // Use generous proximity check for token pickup (center-to-center distance)
+            // rather than strict vertex-in-circle, since tokens are small collectibles
+            float tdx = ships_[i].x - tok.x;
+            float tdy = ships_[i].y - tok.y;
+            float dist_sq = tdx * tdx + tdy * tdy;
             float hit_r = tok.radius + Triangle::SIZE;
             if (dist_sq < hit_r * hit_r) {
                 tok.alive = false;
@@ -216,8 +218,8 @@ void FighterDrillSession::resolve_bullet_starbase_collisions() {
         if (!b.alive) continue;
         if (!starbase_.alive()) continue;
         if (bullet_circle_collision(b.x, b.y, starbase_.x, starbase_.y, starbase_.radius)) {
-            starbase_.take_damage(config_.base_bullet_damage);
             b.alive = false;
+            starbase_.take_damage(config_.base_bullet_damage);
             if (b.owner_index >= 0 &&
                 static_cast<std::size_t>(b.owner_index) < scores_.size()) {
                 scores_[static_cast<std::size_t>(b.owner_index)] +=
