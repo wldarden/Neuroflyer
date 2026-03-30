@@ -56,14 +56,18 @@ managed in the hangar or pause screen instead.
 
 `record_generation` in `mrca_tracker.cpp:48` asserts `elite_ids.size() == elite_count_`, but `record_mrca` in `fly_session.cpp` clamps to `min(elitism_count, population.size())`. When the population is smaller than the configured elitism count, the assertion fires. Fix: either clamp `elite_count_` on construction or have `record_generation` handle a shorter elite list.
 
-## 8. Arena Perception Phase 2: Commander Net + Multiple Squads
+## 8. Squad Leader Net (Arena Phase 1.5)
 
-Add the commander net layer on top of the working squad broadcast system (Phase 1). One recurrent commander net per team sees macro state (4x4 sector grid, squad stats, top-threat analysis) and outputs state signals fed to all squad broadcast nets. Multiple squads per team, each getting different broadcasts. Validates that the commander layer adds strategic value over bare squad nets. See `docs/superpowers/specs/2026-03-28-arena-perception-design.md` Phase 2 section.
+Replace the simple squad broadcast net with a structured squad leader net. The squad leader makes discrete tactical decisions (attack starbase / attack ship / defend home, expand / contract) via 1-hot output groups. Uses **Near Threat Matrix (NTM)** sub-nets — shared-weight nets duplicated per nearby enemy, with top-1 threat selection. Sector grid (2000x2000) with Manhattan distance diamond for efficient spatial indexing. Fighters receive 6 structured inputs from squad leader orders (target heading/dist, center heading/dist, aggression, spacing) instead of 4 opaque broadcast floats. See `docs/superpowers/specs/2026-03-30-squad-leader-design.md`.
 
-## 9. Arena Perception Phase 3: Enemy Analysis Net + Multi-Team Matches
+## 9. Arena Perception Phase 2: Commander Net + Multiple Squads
+
+Add the commander net layer on top of the working squad leader system. One recurrent commander net per team sees macro state (4x4 sector grid, squad stats, top-threat analysis) and outputs commander_target_heading/distance that the squad leader currently hardcodes to enemy starbase. Multiple squads per team, each with its own squad leader getting different commander signals. Validates that the commander layer adds strategic value over bare squad leaders. See `docs/superpowers/specs/2026-03-28-arena-perception-design.md` Phase 2 section.
+
+## 10. Arena Perception Phase 3: Enemy Analysis Net + Multi-Team Matches
 
 Add the enemy analysis sub-net (shared weights, duplicated per enemy team). Outputs threat_score for top-1 selection + mode signals (defend_home, attack_base, attack_squad) interpreted by the game engine. Multi-team matches with small-group matchmaking (groups of 3-4). Full team-level evolution with the complete four-net architecture. See `docs/superpowers/specs/2026-03-28-arena-perception-design.md` Phase 3 section.
 
-## 10. Arena Matchmaking Improvements
+## 11. Arena Matchmaking Improvements
 
 Current Phase 1 arena always pits team genomes 0 vs 1. Implement proper matchmaking: round-robin or random pairing across the full population so all team genomes get match experience each generation. Consider Swiss-style pairing (similar-fitness teams matched together) for better selection pressure.
