@@ -1,4 +1,5 @@
 #include <neuroflyer/ui/screens/arena_game_screen.h>
+#include <neuroflyer/ui/screens/arena_pause_screen.h>
 #include <neuroflyer/ui/screens/pause_config_screen.h>
 #include <neuroflyer/ui/views/arena_game_info_view.h>
 #include <neuroflyer/ui/views/arena_game_view.h>
@@ -118,9 +119,16 @@ void ArenaGameScreen::start_new_match(AppState& state) {
     uint32_t seed = static_cast<uint32_t>(state.rng());
     arena_ = std::make_unique<ArenaSession>(config_, seed);
 
-    // For now, use team genomes 0 and 1
-    // (In future: matchmaking picks different pairs per round)
-    current_team_indices_ = {0, 1};
+    // Random matchmaking: pick 2 distinct team genomes for this round
+    {
+        std::uniform_int_distribution<std::size_t> dist(0, team_population_.size() - 1);
+        std::size_t a = dist(state.rng);
+        std::size_t b = dist(state.rng);
+        while (b == a && team_population_.size() > 1) {
+            b = dist(state.rng);
+        }
+        current_team_indices_ = {a, b};
+    }
 
     // Clear stale net viewer pointers before rebuilding networks
     net_viewer_state_.network = nullptr;
@@ -213,9 +221,13 @@ void ArenaGameScreen::handle_input(UIManager& ui) {
     if (keys[SDL_SCANCODE_3]) ticks_per_frame_ = 20;
     if (keys[SDL_SCANCODE_4]) ticks_per_frame_ = 100;
 
-    // Space: pause
+    // Space: open pause screen
     if (ImGui::IsKeyPressed(ImGuiKey_Space)) {
-        paused_ = !paused_;
+        paused_ = true;
+        ui.push_screen(std::make_unique<ArenaPauseScreen>(
+            team_population_, generation_, ship_design_,
+            squad_genome_dir_, squad_paired_fighter_name_, ntm_config_,
+            [this]() { paused_ = false; }));
     }
 
     // Escape: exit
@@ -254,6 +266,8 @@ void ArenaGameScreen::tick_arena(AppState& /*state*/) {
         auto stats = arena_->compute_squad_stats(team, 0);
         squad_center_xs[t] = stats.centroid_x;
         squad_center_ys[t] = stats.centroid_y;
+
+        if (stats.alive_fraction < 1e-6f) continue;
 
         auto threats = gather_near_threats(
             grid, stats.centroid_x, stats.centroid_y,
@@ -377,11 +391,16 @@ void ArenaGameScreen::do_arena_evolution(AppState& state) {
     std::cout << "[Arena Gen " << generation_ << "] Best team fitness: "
               << static_cast<int>(best) << "\n";
 
+    // Clear stale individual pointer BEFORE population is replaced
+    net_viewer_state_.individual = nullptr;
+    net_viewer_state_.network = nullptr;
+
     // Evolve
     if (squad_training_mode_) {
         team_population_ = evolve_squad_only(team_population_, evo_config_, state.rng);
-        // Refreeze fighter weights from paired snapshot
-        auto fighter_ind = snapshot_to_individual(paired_fighter_snapshot_);
+        // Refreeze fighter weights from paired snapshot (convert to arena format)
+        auto fighter_ind = convert_variant_to_fighter(
+            snapshot_to_individual(paired_fighter_snapshot_), ship_design_);
         for (auto& team : team_population_) {
             team.fighter_individual = fighter_ind;
         }
