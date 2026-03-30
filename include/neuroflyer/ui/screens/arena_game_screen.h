@@ -10,6 +10,7 @@
 #include <neuroflyer/squad_leader.h>
 #include <neuroflyer/team_evolution.h>
 #include <neuroflyer/ui/ui_screen.h>
+#include <neuroflyer/ui/views/net_viewer_view.h>
 
 #include <memory>
 #include <string>
@@ -20,6 +21,7 @@ namespace neuroflyer {
 class ArenaGameScreen : public UIScreen {
 public:
     explicit ArenaGameScreen(const ArenaConfig& config);
+    ~ArenaGameScreen() override;
 
     void on_enter() override;
     void on_draw(AppState& state, Renderer& renderer, UIManager& ui) override;
@@ -67,6 +69,13 @@ private:
     std::string squad_paired_fighter_name_;
     std::string squad_genome_dir_;
     Snapshot paired_fighter_snapshot_;  // loaded once, reused to refreeze fighters
+
+    // Net viewer for follow mode
+    enum class FollowNetView { Fighter, SquadLeader };
+    NetViewerViewState net_viewer_state_;
+    FollowNetView follow_net_view_ = FollowNetView::Fighter;
+    std::vector<float> last_fighter_input_;
+    std::vector<float> last_leader_input_;
 };
 
 } // namespace neuroflyer

@@ -29,6 +29,10 @@ namespace neuroflyer {
 ArenaGameScreen::ArenaGameScreen(const ArenaConfig& config)
     : config_(config) {}
 
+ArenaGameScreen::~ArenaGameScreen() {
+    destroy_net_viewer_view(net_viewer_state_);
+}
+
 // ==================== Lifecycle ====================
 
 void ArenaGameScreen::on_enter() {
@@ -81,8 +85,7 @@ void ArenaGameScreen::initialize(AppState& state) {
         team_population_.clear();
         for (std::size_t i = 0; i < team_pop_size; ++i) {
             auto team = TeamIndividual::create(
-                ship_design_, {8, 8}, ntm_config_, leader_config_, state.rng);
-            team.fighter_individual = fighter_ind;  // frozen copy
+                ship_design_, {8, 8}, ntm_config_, leader_config_, state.rng, &fighter_ind);
             team_population_.push_back(std::move(team));
         }
 
@@ -118,6 +121,10 @@ void ArenaGameScreen::start_new_match(AppState& state) {
     // For now, use team genomes 0 and 1
     // (In future: matchmaking picks different pairs per round)
     current_team_indices_ = {0, 1};
+
+    // Clear stale net viewer pointers before rebuilding networks
+    net_viewer_state_.network = nullptr;
+    net_viewer_state_.individual = nullptr;
 
     // Compile networks: NTM + squad leader + fighter per team
     ntm_nets_.clear();
@@ -288,6 +295,24 @@ void ArenaGameScreen::tick_arena(AppState& /*state*/) {
             own_base_hp, stats.squad_spacing,
             cmd_heading_sin, cmd_heading_cos, cmd_target_distance,
             ntm, own_base_x, own_base_y, enemy_base_x, enemy_base_y);
+
+        // Capture squad leader input for the followed ship's team
+        if (camera_.following
+            && selected_ship_ >= 0
+            && static_cast<std::size_t>(selected_ship_) < arena_->ships().size()
+            && ship_teams_[static_cast<std::size_t>(selected_ship_)] == static_cast<int>(t)) {
+            last_leader_input_ = {
+                stats.alive_fraction,
+                home_heading_sin, home_heading_cos, home_distance,
+                own_base_hp, stats.squad_spacing,
+                cmd_heading_sin, cmd_heading_cos, cmd_target_distance,
+                ntm.active ? 1.0f : 0.0f,
+                ntm.active ? ntm.heading_sin : 0.0f,
+                ntm.active ? ntm.heading_cos : 0.0f,
+                ntm.active ? ntm.distance : 0.0f,
+                ntm.active ? ntm.threat_score : 0.0f
+            };
+        }
     }
 
     // 3. Per fighter: compute squad leader fighter inputs + build arena input
@@ -324,6 +349,11 @@ void ArenaGameScreen::tick_arena(AppState& /*state*/) {
             sl_inputs.squad_center_heading, sl_inputs.squad_center_distance,
             sl_inputs.aggression, sl_inputs.spacing,
             recurrent_states_[i]);
+
+        // Capture fighter input for the followed ship
+        if (camera_.following && i == static_cast<std::size_t>(selected_ship_)) {
+            last_fighter_input_ = input;
+        }
 
         auto output = fighter_nets_[t].forward(input);
         auto decoded = decode_output(output, ship_design_.memory_slots);
@@ -405,46 +435,108 @@ void ArenaGameScreen::render_arena(Renderer& renderer) {
     SDL_RenderDrawLine(renderer.renderer_,
                        game_panel_w, 0, game_panel_w, game_panel_h);
 
-    // Right panel: ArenaGameInfoView (ImGui)
+    // Right panel
     int info_x = game_panel_w + 10;
     int info_w = renderer.net_w() - 20;
-    (void)info_w; // used implicitly by ImGui window positioning
 
-    ImGui::SetNextWindowPos(ImVec2(static_cast<float>(info_x), 10.0f),
-                            ImGuiCond_Always);
-    ImGui::SetNextWindowSize(
-        ImVec2(static_cast<float>(renderer.net_w() - 20),
-               static_cast<float>(game_panel_h - 20)),
-        ImGuiCond_Always);
-    ImGui::Begin("##ArenaInfo", nullptr,
-        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
-        ImGuiWindowFlags_NoScrollbar);
+    // Determine if we should show the net viewer (follow mode with valid alive ship)
+    bool show_net_viewer = camera_.following
+        && selected_ship_ >= 0
+        && static_cast<std::size_t>(selected_ship_) < arena_->ships().size()
+        && arena_->ships()[static_cast<std::size_t>(selected_ship_)].alive;
 
-    ArenaInfoState info;
-    info.generation = generation_;
-    info.current_tick = arena_->current_tick();
-    info.time_limit_ticks = config_.time_limit_ticks;
-    info.alive_count = arena_->alive_count();
-    info.total_count = config_.population_size();
-    info.teams_alive = arena_->teams_alive();
-    info.num_teams = config_.num_teams;
+    if (show_net_viewer) {
+        // Net selector strip
+        ImGui::SetNextWindowPos(ImVec2(static_cast<float>(info_x), 10.0f),
+                                ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(static_cast<float>(info_w), 36.0f),
+                                 ImGuiCond_Always);
+        ImGui::Begin("##NetSelector", nullptr,
+            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
+            ImGuiWindowFlags_NoScrollbar);
 
-    // Aggregate per-ship kills into per-team totals
-    info.team_enemy_kills.assign(config_.num_teams, 0);
-    info.team_ally_kills.assign(config_.num_teams, 0);
-    const auto& ek = arena_->enemy_kills();
-    const auto& ak = arena_->ally_kills();
-    for (std::size_t i = 0; i < ek.size(); ++i) {
-        auto t_idx = static_cast<std::size_t>(arena_->team_of(i));
-        info.team_enemy_kills[t_idx] += ek[i];
-        info.team_ally_kills[t_idx] += ak[i];
+        bool is_fighter = (follow_net_view_ == FollowNetView::Fighter);
+        if (is_fighter) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.3f, 1.0f));
+        if (ImGui::Button("Fighter", ImVec2(info_w / 2.0f - 8.0f, 0))) {
+            follow_net_view_ = FollowNetView::Fighter;
+        }
+        if (is_fighter) ImGui::PopStyleColor();
+
+        ImGui::SameLine();
+
+        bool is_leader = (follow_net_view_ == FollowNetView::SquadLeader);
+        if (is_leader) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5f, 0.4f, 0.2f, 1.0f));
+        if (ImGui::Button("Squad Leader", ImVec2(info_w / 2.0f - 8.0f, 0))) {
+            follow_net_view_ = FollowNetView::SquadLeader;
+        }
+        if (is_leader) ImGui::PopStyleColor();
+
+        ImGui::End();
+
+        // Configure net viewer state
+        int team = ship_teams_[static_cast<std::size_t>(selected_ship_)];
+        auto t = static_cast<std::size_t>(team);
+        auto team_genome_idx = current_team_indices_[t];
+
+        if (follow_net_view_ == FollowNetView::Fighter) {
+            net_viewer_state_.individual = &team_population_[team_genome_idx].fighter_individual;
+            net_viewer_state_.network = &fighter_nets_[t];
+            net_viewer_state_.ship_design = ship_design_;
+            net_viewer_state_.net_type = NetType::Fighter;
+            net_viewer_state_.input_values = last_fighter_input_;
+        } else {
+            net_viewer_state_.individual = &team_population_[team_genome_idx].squad_individual;
+            net_viewer_state_.network = &leader_nets_[t];
+            net_viewer_state_.ship_design = ship_design_;
+            net_viewer_state_.net_type = NetType::SquadLeader;
+            net_viewer_state_.input_values = last_leader_input_;
+        }
+
+        int net_y = 50;  // below selector strip
+        net_viewer_state_.render_x = info_x;
+        net_viewer_state_.render_y = net_y;
+        net_viewer_state_.render_w = info_w;
+        net_viewer_state_.render_h = game_panel_h - net_y - 10;
+
+        draw_net_viewer_view(net_viewer_state_, renderer.renderer_);
+    } else {
+        // Info view (default when not following)
+        ImGui::SetNextWindowPos(ImVec2(static_cast<float>(info_x), 10.0f),
+                                ImGuiCond_Always);
+        ImGui::SetNextWindowSize(
+            ImVec2(static_cast<float>(info_w),
+                   static_cast<float>(game_panel_h - 20)),
+            ImGuiCond_Always);
+        ImGui::Begin("##ArenaInfo", nullptr,
+            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
+            ImGuiWindowFlags_NoScrollbar);
+
+        ArenaInfoState info;
+        info.generation = generation_;
+        info.current_tick = arena_->current_tick();
+        info.time_limit_ticks = config_.time_limit_ticks;
+        info.alive_count = arena_->alive_count();
+        info.total_count = config_.population_size();
+        info.teams_alive = arena_->teams_alive();
+        info.num_teams = config_.num_teams;
+
+        info.team_enemy_kills.assign(config_.num_teams, 0);
+        info.team_ally_kills.assign(config_.num_teams, 0);
+        const auto& ek = arena_->enemy_kills();
+        const auto& ak = arena_->ally_kills();
+        for (std::size_t i = 0; i < ek.size(); ++i) {
+            auto t_idx = static_cast<std::size_t>(arena_->team_of(i));
+            info.team_enemy_kills[t_idx] += ek[i];
+            info.team_ally_kills[t_idx] += ak[i];
+        }
+        info.team_scores = arena_->get_scores();
+
+        draw_arena_game_info_view(info);
+
+        ImGui::End();
     }
-    info.team_scores = arena_->get_scores();
-
-    draw_arena_game_info_view(info);
-
-    ImGui::End();
 }
 
 // ==================== Main draw ====================
@@ -525,8 +617,8 @@ void ArenaGameScreen::on_draw(AppState& state, Renderer& renderer,
     render_arena(renderer);
 }
 
-void ArenaGameScreen::post_render(SDL_Renderer* /*sdl_renderer*/) {
-    // No deferred SDL rendering needed for arena mode (no neural net panel)
+void ArenaGameScreen::post_render(SDL_Renderer* sdl_renderer) {
+    flush_net_viewer_view(net_viewer_state_, sdl_renderer);
 }
 
 } // namespace neuroflyer
