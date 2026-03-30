@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <numbers>
 
 namespace neuroflyer {
 
@@ -115,31 +114,24 @@ DirRange compute_dir_range(
     return result;
 }
 
-std::size_t compute_arena_input_size(
-    const ShipDesign& design,
-    std::size_t broadcast_signal_count) {
-
+std::size_t compute_arena_input_size(const ShipDesign& design) {
     std::size_t sensor_values = 0;
     for (const auto& s : design.sensors) {
         sensor_values += s.is_full_sensor ? 5 : 1;
     }
-    // sensors + position(3) + nav(7) + broadcast + memory
-    return sensor_values + 3 + 7 + broadcast_signal_count + design.memory_slots;
+    return sensor_values + 6 + design.memory_slots;
 }
 
 std::vector<float> build_arena_ship_input(
     const ShipDesign& design,
     const ArenaQueryContext& ctx,
-    float dir_to_target_sin, float dir_to_target_cos, float range_to_target,
-    float dir_to_home_sin, float dir_to_home_cos, float range_to_home,
-    float own_base_hp,
     float squad_target_heading, float squad_target_distance,
     float squad_center_heading, float squad_center_distance,
     float aggression, float spacing,
     std::span<const float> memory) {
 
     std::vector<float> input;
-    input.reserve(compute_arena_input_size(design, 6));
+    input.reserve(compute_arena_input_size(design));
 
     // --- Sensor values ---
     for (const auto& sensor : design.sensors) {
@@ -160,21 +152,6 @@ std::vector<float> build_arena_ship_input(
             input.push_back(reading.entity_type == ArenaHitType::Bullet ? 1.0f : 0.0f);
         }
     }
-
-    // --- Position: 3 values ---
-    constexpr float PI = std::numbers::pi_v<float>;
-    input.push_back(ctx.ship_x / ctx.world_w * 2.0f - 1.0f);
-    input.push_back(ctx.ship_y / ctx.world_h * 2.0f - 1.0f);
-    input.push_back(ctx.ship_rotation / PI);
-
-    // --- Nav: 7 values ---
-    input.push_back(dir_to_target_sin);
-    input.push_back(dir_to_target_cos);
-    input.push_back(range_to_target);
-    input.push_back(dir_to_home_sin);
-    input.push_back(dir_to_home_cos);
-    input.push_back(range_to_home);
-    input.push_back(own_base_hp);
 
     // --- Squad leader inputs (6) ---
     input.push_back(squad_target_heading);

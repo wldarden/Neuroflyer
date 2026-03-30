@@ -42,7 +42,8 @@ struct NtmResult {
     bool active = false;             // true if any threats were found
     float threat_score = 0.0f;       // evolved score of the active threat
     float target_x = 0, target_y = 0; // position of active threat entity
-    float heading = 0.0f;            // direction from squad center (radians, normalized)
+    float heading_sin = 0.0f;        // direction from squad center (sin component)
+    float heading_cos = 0.0f;        // direction from squad center (cos component)
     float distance = 0.0f;           // distance from squad center (normalized to world diag)
 };
 
@@ -82,12 +83,10 @@ struct SquadLeaderOrder {
 [[nodiscard]] SquadLeaderOrder run_squad_leader(
     const neuralnet::Network& leader_net,
     float squad_health,
-    float home_distance,
-    float home_heading,
+    float home_heading_sin, float home_heading_cos, float home_distance,
     float home_health,
     float squad_spacing,
-    float commander_target_heading,
-    float commander_target_distance,
+    float cmd_target_heading_sin, float cmd_target_heading_cos, float cmd_target_distance,
     const NtmResult& ntm,
     float own_base_x, float own_base_y,
     float enemy_base_x, float enemy_base_y);
@@ -107,6 +106,7 @@ struct SquadLeaderFighterInputs {
 /// Compute the 6 fighter inputs from the squad leader's orders.
 [[nodiscard]] SquadLeaderFighterInputs compute_squad_leader_fighter_inputs(
     float fighter_x, float fighter_y,
+    float fighter_rotation,
     const SquadLeaderOrder& order,
     float squad_center_x, float squad_center_y,
     float world_w, float world_h);

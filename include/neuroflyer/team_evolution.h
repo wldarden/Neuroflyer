@@ -11,13 +11,13 @@
 namespace neuroflyer {
 
 struct NtmNetConfig {
-    std::size_t input_size = 6;
+    std::size_t input_size = 7;
     std::vector<std::size_t> hidden_sizes = {4};
     std::size_t output_size = 1;  // threat_score only
 };
 
 struct SquadLeaderNetConfig {
-    std::size_t input_size = 11;
+    std::size_t input_size = 14;
     std::vector<std::size_t> hidden_sizes = {8};
     std::size_t output_size = 5;  // 2 spacing + 3 tactical
 };

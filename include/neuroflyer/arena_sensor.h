@@ -56,18 +56,13 @@ struct DirRange {
     float world_w, float world_h);
 
 /// Compute arena fighter input size.
-[[nodiscard]] std::size_t compute_arena_input_size(
-    const ShipDesign& design,
-    std::size_t broadcast_signal_count);
+[[nodiscard]] std::size_t compute_arena_input_size(const ShipDesign& design);
 
 /// Build the complete arena fighter input vector.
-/// Layout: [sensor values...] [pos/rotation] [nav inputs] [squad leader inputs (6)] [memory]
+/// Layout: [sensor values...] [squad leader inputs (6)] [memory]
 [[nodiscard]] std::vector<float> build_arena_ship_input(
     const ShipDesign& design,
     const ArenaQueryContext& ctx,
-    float dir_to_target_sin, float dir_to_target_cos, float range_to_target,
-    float dir_to_home_sin, float dir_to_home_cos, float range_to_home,
-    float own_base_hp,
     float squad_target_heading, float squad_target_distance,
     float squad_center_heading, float squad_center_distance,
     float aggression, float spacing,

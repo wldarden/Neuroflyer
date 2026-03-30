@@ -46,12 +46,12 @@ struct ArenaConfig {
     int ntm_sector_radius = 2;  // Manhattan distance for "near"
 
     // Near Threat Matrix (NTM) sub-net topology
-    std::size_t ntm_input_size = 6;
+    std::size_t ntm_input_size = 7;
     std::vector<std::size_t> ntm_hidden_sizes = {4};
     std::size_t ntm_output_size = 1;  // just threat_score
 
     // Squad leader net topology
-    std::size_t squad_leader_input_size = 11;
+    std::size_t squad_leader_input_size = 14;
     std::vector<std::size_t> squad_leader_hidden_sizes = {8};
     std::size_t squad_leader_output_size = 5;  // 2 spacing + 3 tactical
 

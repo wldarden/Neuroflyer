@@ -27,9 +27,8 @@ TeamIndividual TeamIndividual::create(
         leader_config.output_size,
         rng);
 
-    // Fighter net: uses arena input size with 6 squad leader inputs (not 4 broadcasts)
-    std::size_t arena_input = compute_arena_input_size(
-        fighter_design, ArenaConfig::squad_leader_fighter_inputs);
+    // Fighter net: uses arena input size (sensors + 6 squad leader inputs + memory)
+    std::size_t arena_input = compute_arena_input_size(fighter_design);
     std::size_t arena_output = compute_output_size(fighter_design);
     team.fighter_individual = Individual::random(
         arena_input,

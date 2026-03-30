@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numbers>
 
 namespace neuroflyer {
 
@@ -76,7 +77,8 @@ NtmResult run_ntm_threat_selection(
             world_w, world_h);
 
         std::vector<float> ntm_input = {
-            std::atan2(dr.dir_sin, dr.dir_cos),  // heading (radians)
+            dr.dir_sin,                            // heading_sin
+            dr.dir_cos,                            // heading_cos
             dr.range,                              // distance (normalized)
             threat.health,
             squad_alive_fraction,
@@ -93,7 +95,8 @@ NtmResult run_ntm_threat_selection(
             result.threat_score = threat_score;
             result.target_x = threat.x;
             result.target_y = threat.y;
-            result.heading = std::atan2(dr.dir_sin, dr.dir_cos);
+            result.heading_sin = dr.dir_sin;
+            result.heading_cos = dr.dir_cos;
             result.distance = dr.range;
         }
     }
@@ -104,26 +107,29 @@ NtmResult run_ntm_threat_selection(
 SquadLeaderOrder run_squad_leader(
     const neuralnet::Network& leader_net,
     float squad_health,
-    float home_distance,
-    float home_heading,
+    float home_heading_sin, float home_heading_cos, float home_distance,
     float home_health,
     float squad_spacing,
-    float commander_target_heading,
-    float commander_target_distance,
+    float cmd_target_heading_sin, float cmd_target_heading_cos, float cmd_target_distance,
     const NtmResult& ntm,
     float own_base_x, float own_base_y,
     float enemy_base_x, float enemy_base_y) {
 
+    float squad_spacing_val = squad_spacing;
+
     std::vector<float> input = {
         squad_health,
+        home_heading_sin,
+        home_heading_cos,
         home_distance,
-        home_heading,
         home_health,
-        squad_spacing,
-        commander_target_heading,
-        commander_target_distance,
-        ntm.active ? 1.0f : 0.0f,       // active_threat
-        ntm.active ? ntm.heading : 0.0f,
+        squad_spacing_val,
+        cmd_target_heading_sin,
+        cmd_target_heading_cos,
+        cmd_target_distance,
+        ntm.active ? 1.0f : 0.0f,
+        ntm.active ? ntm.heading_sin : 0.0f,
+        ntm.active ? ntm.heading_cos : 0.0f,
         ntm.active ? ntm.distance : 0.0f,
         ntm.active ? ntm.threat_score : 0.0f
     };
@@ -175,24 +181,37 @@ SquadLeaderOrder run_squad_leader(
 
 SquadLeaderFighterInputs compute_squad_leader_fighter_inputs(
     float fighter_x, float fighter_y,
+    float fighter_rotation,
     const SquadLeaderOrder& order,
     float squad_center_x, float squad_center_y,
     float world_w, float world_h) {
 
+    constexpr float PI = std::numbers::pi_v<float>;
+
     SquadLeaderFighterInputs inputs;
 
+    // Squad target: relative to fighter facing
     auto target_dr = compute_dir_range(
         fighter_x, fighter_y,
         order.target_x, order.target_y,
         world_w, world_h);
-    inputs.squad_target_heading = std::atan2(target_dr.dir_sin, target_dr.dir_cos);
+    float target_world_angle = std::atan2(target_dr.dir_sin, target_dr.dir_cos);
+    float target_relative = target_world_angle - fighter_rotation;
+    while (target_relative > PI) target_relative -= 2.0f * PI;
+    while (target_relative < -PI) target_relative += 2.0f * PI;
+    inputs.squad_target_heading = target_relative / PI;  // [-1, 1]
     inputs.squad_target_distance = target_dr.range;
 
+    // Squad center: relative to fighter facing
     auto center_dr = compute_dir_range(
         fighter_x, fighter_y,
         squad_center_x, squad_center_y,
         world_w, world_h);
-    inputs.squad_center_heading = std::atan2(center_dr.dir_sin, center_dr.dir_cos);
+    float center_world_angle = std::atan2(center_dr.dir_sin, center_dr.dir_cos);
+    float center_relative = center_world_angle - fighter_rotation;
+    while (center_relative > PI) center_relative -= 2.0f * PI;
+    while (center_relative < -PI) center_relative += 2.0f * PI;
+    inputs.squad_center_heading = center_relative / PI;  // [-1, 1]
     inputs.squad_center_distance = center_dr.range;
 
     switch (order.tactical) {
