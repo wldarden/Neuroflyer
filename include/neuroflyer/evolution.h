@@ -63,6 +63,13 @@ struct Individual {
 /// Hash an individual's weights to produce a unique ID for MRCA dedup.
 [[nodiscard]] uint32_t individual_hash(const Individual& ind);
 
+/// Convert a scroller-mode variant Individual to an arena-mode fighter.
+/// Removes scroller position inputs, adds arena sensor extras and squad leader inputs.
+/// New input weights are zero-initialized to preserve existing behavior.
+[[nodiscard]] Individual convert_variant_to_fighter(
+    const Individual& variant,
+    const ShipDesign& design);
+
 /// Check if two individuals have the same topology.
 [[nodiscard]] bool same_topology(const Individual& a, const Individual& b);
 

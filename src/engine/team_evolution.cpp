@@ -9,7 +9,8 @@ TeamIndividual TeamIndividual::create(
     const std::vector<std::size_t>& fighter_hidden,
     const NtmNetConfig& ntm_config,
     const SquadLeaderNetConfig& leader_config,
-    std::mt19937& rng) {
+    std::mt19937& rng,
+    const Individual* variant) {
 
     TeamIndividual team;
 
@@ -28,13 +29,17 @@ TeamIndividual TeamIndividual::create(
         rng);
 
     // Fighter net: uses arena input size (sensors + 6 squad leader inputs + memory)
-    std::size_t arena_input = compute_arena_input_size(fighter_design);
-    std::size_t arena_output = compute_output_size(fighter_design);
-    team.fighter_individual = Individual::random(
-        arena_input,
-        fighter_hidden,
-        arena_output,
-        rng);
+    if (variant) {
+        team.fighter_individual = convert_variant_to_fighter(*variant, fighter_design);
+    } else {
+        std::size_t arena_input = compute_arena_input_size(fighter_design);
+        std::size_t arena_output = compute_output_size(fighter_design);
+        team.fighter_individual = Individual::random(
+            arena_input,
+            fighter_hidden,
+            arena_output,
+            rng);
+    }
 
     return team;
 }

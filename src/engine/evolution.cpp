@@ -238,6 +238,84 @@ bool same_topology(const Individual& a, const Individual& b) {
     return true;
 }
 
+Individual convert_variant_to_fighter(
+    const Individual& variant,
+    const ShipDesign& design) {
+
+    Individual result;
+
+    // 1. Compute arena input size
+    std::size_t arena_sensor_vals = 0;
+    for (const auto& s : design.sensors) {
+        arena_sensor_vals += s.is_full_sensor ? 5 : 1;
+    }
+
+    std::size_t arena_input = arena_sensor_vals + 6 + design.memory_slots;
+
+    // 2. Build new topology — same layers, new input_size
+    result.topology.input_size = arena_input;
+    result.topology.layers = variant.topology.layers;
+
+    // 3. Copy genome and resize layer_0_weights
+    result.genome = variant.genome;
+
+    if (variant.topology.layers.empty()) return result;
+
+    std::size_t hidden0_size = variant.topology.layers[0].output_size;
+    std::size_t old_input = variant.topology.input_size;
+
+    // 4. Build new weight matrix for layer 0
+    std::vector<float> new_weights(arena_input * hidden0_size, 0.0f);
+
+    const auto& old_weights = variant.genome.gene("layer_0_weights").values;
+
+    for (std::size_t out = 0; out < hidden0_size; ++out) {
+        std::size_t src_col = 0;  // column in scroller weight matrix
+        std::size_t dst_col = 0;  // column in arena weight matrix
+
+        // Map sensor weights
+        for (const auto& sensor : design.sensors) {
+            if (sensor.is_full_sensor) {
+                // Copy distance weight
+                new_weights[out * arena_input + dst_col + 0] =
+                    old_weights[out * old_input + src_col + 0];
+                // Copy is_tower weight
+                new_weights[out * arena_input + dst_col + 1] =
+                    old_weights[out * old_input + src_col + 1];
+                // arena[2]=is_token, arena[3]=is_friend, arena[4]=is_bullet -> zero (already 0)
+                src_col += 4;  // scroller: distance, is_tower, token_value, is_token
+                dst_col += 5;  // arena: distance, is_tower, is_token, is_friend, is_bullet
+            } else {
+                // Sight sensor: just distance, copy directly
+                new_weights[out * arena_input + dst_col] =
+                    old_weights[out * old_input + src_col];
+                src_col += 1;
+                dst_col += 1;
+            }
+        }
+
+        // Skip scroller position inputs (3 columns)
+        src_col += 3;
+
+        // Squad leader inputs (6 columns) — leave as zero
+        dst_col += 6;
+
+        // Copy memory weights
+        for (std::size_t m = 0; m < design.memory_slots; ++m) {
+            new_weights[out * arena_input + dst_col + m] =
+                old_weights[out * old_input + src_col + m];
+        }
+    }
+
+    // 5. Replace layer_0_weights in genome
+    result.genome.gene("layer_0_weights").values = std::move(new_weights);
+
+    // Biases and activations for layer 0: unchanged (same number of output nodes)
+    // All higher layers: unchanged (same dimensions)
+
+    return result;
+}
+
 void mutate_individual(Individual& ind, const EvolutionConfig& /*config*/, std::mt19937& rng) {
     // StructuredGenome carries per-gene mutation configs — no external config needed
     evolve::mutate(ind.genome, rng);
