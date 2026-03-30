@@ -155,3 +155,59 @@ TEST(FighterDrillSessionTest, BulletDiesAtMaxRange) {
     for (int i = 0; i < 10; ++i) session.tick();
     EXPECT_EQ(session.bullets().size(), 0u);
 }
+
+// ── Task 4 tests ────────────────────────────────────────────────────────────
+
+TEST(FighterDrillSessionTest, ShipDiesOnTowerCollision) {
+    nf::FighterDrillConfig config;
+    config.population_size = 1;
+    config.tower_count = 0;
+    config.token_count = 0;
+    nf::FighterDrillSession session(config, 42);
+
+    auto& ship = session.ships()[0];
+    EXPECT_TRUE(ship.alive);
+    session.tick();
+    EXPECT_TRUE(session.ships()[0].alive);
+}
+
+TEST(FighterDrillSessionTest, TokenCollectionWorks) {
+    nf::FighterDrillConfig config;
+    config.population_size = 1;
+    config.tower_count = 0;
+    config.token_count = 1;
+    config.world_width = 100.0f;
+    config.world_height = 100.0f;
+    nf::FighterDrillSession session(config, 42);
+
+    auto& ship = session.ships()[0];
+    const auto& tok = session.tokens()[0];
+    ship.x = tok.x;
+    ship.y = tok.y;
+    session.tick();
+    EXPECT_FALSE(session.tokens()[0].alive);
+}
+
+TEST(FighterDrillSessionTest, BulletDamagesStarbase) {
+    nf::FighterDrillConfig config;
+    config.population_size = 1;
+    config.tower_count = 0;
+    config.token_count = 0;
+    config.starbase_hp = 100.0f;
+    config.base_bullet_damage = 10.0f;
+    config.starbase_distance = 50.0f;
+    nf::FighterDrillSession session(config, 42);
+
+    float initial_hp = session.starbase().hp;
+    EXPECT_FLOAT_EQ(initial_hp, 100.0f);
+
+    auto& ship = session.ships()[0];
+    float dx = session.starbase().x - ship.x;
+    float dy = session.starbase().y - ship.y;
+    ship.rotation = std::atan2(dx, -dy);
+
+    session.set_ship_actions(0, false, false, false, false, true);
+    for (int i = 0; i < 15; ++i) session.tick();
+
+    EXPECT_LT(session.starbase().hp, initial_hp);
+}

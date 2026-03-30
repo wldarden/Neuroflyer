@@ -181,19 +181,64 @@ void FighterDrillSession::update_bullets() {
 }
 
 void FighterDrillSession::resolve_ship_tower_collisions() {
-    // Implemented in Task 4
+    for (auto& ship : ships_) {
+        if (!ship.alive) continue;
+        for (const auto& tower : towers_) {
+            if (!tower.alive) continue;
+            if (triangle_circle_collision_rotated(ship, tower.x, tower.y, tower.radius)) {
+                ship.alive = false;
+                break;
+            }
+        }
+    }
 }
 
 void FighterDrillSession::resolve_ship_token_collisions() {
-    // Implemented in Task 4
+    for (std::size_t i = 0; i < ships_.size(); ++i) {
+        if (!ships_[i].alive) continue;
+        for (auto& tok : tokens_) {
+            if (!tok.alive) continue;
+            float dx = ships_[i].x - tok.x;
+            float dy = ships_[i].y - tok.y;
+            float dist_sq = dx * dx + dy * dy;
+            float hit_r = tok.radius + Triangle::SIZE;
+            if (dist_sq < hit_r * hit_r) {
+                tok.alive = false;
+                tokens_collected_[i]++;
+                scores_[i] += config_.token_bonus;
+            }
+        }
+    }
 }
 
 void FighterDrillSession::resolve_bullet_starbase_collisions() {
-    // Implemented in Task 4
+    for (auto& b : bullets_) {
+        if (!b.alive) continue;
+        if (!starbase_.alive()) continue;
+        if (bullet_circle_collision(b.x, b.y, starbase_.x, starbase_.y, starbase_.radius)) {
+            starbase_.take_damage(config_.base_bullet_damage);
+            b.alive = false;
+            if (b.owner_index >= 0 &&
+                static_cast<std::size_t>(b.owner_index) < scores_.size()) {
+                scores_[static_cast<std::size_t>(b.owner_index)] +=
+                    config_.attack_hit_bonus;
+            }
+        }
+    }
 }
 
 void FighterDrillSession::resolve_bullet_tower_collisions() {
-    // Implemented in Task 4
+    for (auto& b : bullets_) {
+        if (!b.alive) continue;
+        for (auto& tower : towers_) {
+            if (!tower.alive) continue;
+            if (bullet_circle_collision(b.x, b.y, tower.x, tower.y, tower.radius)) {
+                tower.alive = false;
+                b.alive = false;
+                break;
+            }
+        }
+    }
 }
 
 void FighterDrillSession::compute_phase_scores() {

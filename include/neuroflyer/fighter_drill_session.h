@@ -1,6 +1,7 @@
 #pragma once
 
 #include <neuroflyer/base.h>
+#include <neuroflyer/collision.h>
 #include <neuroflyer/game.h>
 
 #include <cmath>
