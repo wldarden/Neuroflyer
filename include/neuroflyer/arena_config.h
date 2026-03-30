@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 namespace neuroflyer {
 
@@ -39,7 +40,23 @@ struct ArenaConfig {
     // Squads
     std::size_t num_squads = 1;
     std::size_t fighters_per_squad = 8;
-    std::size_t squad_broadcast_signals = 4;
+
+    // Sector grid (for NTM spatial indexing)
+    float sector_size = 2000.0f;
+    int ntm_sector_radius = 2;  // Manhattan distance for "near"
+
+    // Near Threat Matrix (NTM) sub-net topology
+    std::size_t ntm_input_size = 6;
+    std::vector<std::size_t> ntm_hidden_sizes = {4};
+    std::size_t ntm_output_size = 1;  // just threat_score
+
+    // Squad leader net topology
+    std::size_t squad_leader_input_size = 11;
+    std::vector<std::size_t> squad_leader_hidden_sizes = {8};
+    std::size_t squad_leader_output_size = 5;  // 2 spacing + 3 tactical
+
+    // Squad leader fighter inputs (replaces broadcast signals)
+    static constexpr std::size_t squad_leader_fighter_inputs = 6;
 
     // Fitness weights
     float fitness_weight_base_damage = 1.0f;
