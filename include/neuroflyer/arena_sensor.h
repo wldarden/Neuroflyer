@@ -61,14 +61,16 @@ struct DirRange {
     std::size_t broadcast_signal_count);
 
 /// Build the complete arena fighter input vector.
-/// Layout: [sensor values...] [pos/rotation] [nav inputs] [broadcast signals] [memory]
+/// Layout: [sensor values...] [pos/rotation] [nav inputs] [squad leader inputs (6)] [memory]
 [[nodiscard]] std::vector<float> build_arena_ship_input(
     const ShipDesign& design,
     const ArenaQueryContext& ctx,
     float dir_to_target_sin, float dir_to_target_cos, float range_to_target,
     float dir_to_home_sin, float dir_to_home_cos, float range_to_home,
     float own_base_hp,
-    std::span<const float> broadcast_signals,
+    float squad_target_heading, float squad_target_distance,
+    float squad_center_heading, float squad_center_distance,
+    float aggression, float spacing,
     std::span<const float> memory);
 
 } // namespace neuroflyer

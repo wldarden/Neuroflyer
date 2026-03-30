@@ -133,11 +133,13 @@ std::vector<float> build_arena_ship_input(
     float dir_to_target_sin, float dir_to_target_cos, float range_to_target,
     float dir_to_home_sin, float dir_to_home_cos, float range_to_home,
     float own_base_hp,
-    std::span<const float> broadcast_signals,
+    float squad_target_heading, float squad_target_distance,
+    float squad_center_heading, float squad_center_distance,
+    float aggression, float spacing,
     std::span<const float> memory) {
 
     std::vector<float> input;
-    input.reserve(compute_arena_input_size(design, broadcast_signals.size()));
+    input.reserve(compute_arena_input_size(design, 6));
 
     // --- Sensor values ---
     for (const auto& sensor : design.sensors) {
@@ -174,8 +176,13 @@ std::vector<float> build_arena_ship_input(
     input.push_back(range_to_home);
     input.push_back(own_base_hp);
 
-    // --- Broadcast signals ---
-    input.insert(input.end(), broadcast_signals.begin(), broadcast_signals.end());
+    // --- Squad leader inputs (6) ---
+    input.push_back(squad_target_heading);
+    input.push_back(squad_target_distance);
+    input.push_back(squad_center_heading);
+    input.push_back(squad_center_distance);
+    input.push_back(aggression);
+    input.push_back(spacing);
 
     // --- Memory ---
     input.insert(input.end(), memory.begin(), memory.end());
