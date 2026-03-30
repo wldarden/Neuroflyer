@@ -88,7 +88,8 @@ void draw_net_viewer_view(NetViewerViewState& state, SDL_Renderer* sdl_renderer)
     auto cfg = build_variant_net_config({
         state.ship_design, *net_ptr, sdl_renderer,
         0, 0, canvas_w, canvas_h,
-        state.input_values, canvas_mx, canvas_my});
+        state.input_values, canvas_mx, canvas_my,
+        state.net_type});
     cfg.text_scale = std::max(1, static_cast<int>(std::round(state.zoom)));
 
     // Store for flush phase

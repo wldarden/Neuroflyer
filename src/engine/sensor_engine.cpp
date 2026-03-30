@@ -407,4 +407,33 @@ std::vector<std::size_t> build_display_order(const ShipDesign& design) {
     return order;
 }
 
+std::vector<std::string> build_squad_leader_input_labels() {
+    return {
+        "Sqd HP",   // squad health
+        "Home Sin",  // home heading sin
+        "Home Cos",  // home heading cos
+        "Home Dst",  // home distance
+        "Home HP",   // home health
+        "Spacing",   // squad spacing
+        "Cmd Sin",   // commander target heading sin
+        "Cmd Cos",   // commander target heading cos
+        "Cmd Dst",   // commander target distance
+        "Threat?",   // active threat flag
+        "Thr Sin",   // threat heading sin
+        "Thr Cos",   // threat heading cos
+        "Thr Dst",   // threat distance
+        "Thr Scr",   // threat score
+    };
+}
+
+std::vector<std::string> build_squad_leader_output_labels() {
+    return {
+        "EXPD",   // expand
+        "CNTR",   // contract
+        "A.BAS",  // attack starbase
+        "A.SHP",  // attack ship
+        "D.HOM",  // defend home
+    };
+}
+
 } // namespace neuroflyer

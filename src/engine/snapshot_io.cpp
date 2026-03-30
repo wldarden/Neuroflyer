@@ -82,7 +82,7 @@ void write_string(std::ostream& out, const std::string& s) {
 // ---- Constants ----
 
 constexpr uint32_t MAGIC = 0x4E465300;  // "NFS\0"
-constexpr uint16_t CURRENT_VERSION = 6;
+constexpr uint16_t CURRENT_VERSION = 7;
 constexpr uint16_t MIN_VERSION = 1;
 
 // ---- Payload serialization ----
@@ -95,6 +95,8 @@ void write_payload(std::ostream& out, const Snapshot& snap) {
     write_val(out, snap.run_count);  // v5+
     // v6: paired_fighter_name
     write_string(out, snap.paired_fighter_name);
+    // v7: net_type
+    write_val<uint8_t>(out, static_cast<uint8_t>(snap.net_type));
 
     // Ship design
     write_val<uint16_t>(out, static_cast<uint16_t>(snap.ship_design.sensors.size()));
@@ -156,6 +158,10 @@ Snapshot parse_payload(std::istream& in, uint16_t version) {
     // v6: paired_fighter_name
     if (version >= 6) {
         snap.paired_fighter_name = read_string(in);
+    }
+    // v7: net_type
+    if (version >= 7) {
+        snap.net_type = static_cast<NetType>(read_val<uint8_t>(in));
     }
 
     // Ship design
@@ -231,6 +237,10 @@ SnapshotHeader parse_header_fields(std::istream& in, uint16_t version) {
     // v6: paired_fighter_name
     if (version >= 6) {
         header.paired_fighter_name = read_string(in);
+    }
+    // v7: net_type
+    if (version >= 7) {
+        header.net_type = static_cast<NetType>(read_val<uint8_t>(in));
     }
     return header;
 }

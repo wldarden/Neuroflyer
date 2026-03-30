@@ -22,9 +22,10 @@ namespace neuroflyer {
 VariantNetEditorScreen::VariantNetEditorScreen(
     Individual individual, neuralnet::Network network,
     ShipDesign ship_design, std::string variant_path,
-    std::string variant_name)
+    std::string variant_name, NetType net_type)
     : individual_(std::move(individual))
     , ship_design_(std::move(ship_design))
+    , net_type_(net_type)
     , variant_path_(std::move(variant_path))
     , variant_name_(std::move(variant_name))
 {
@@ -44,6 +45,7 @@ VariantNetEditorScreen::VariantNetEditorScreen(
     viewer_state_.individual = &individual_;
     viewer_state_.network = &networks_[0];
     viewer_state_.ship_design = ship_design_;
+    viewer_state_.net_type = net_type_;
     viewer_state_.editor_mode = true;
     viewer_state_.zoom = 2.0f;
     viewer_state_.zoom_enabled = true;
@@ -75,6 +77,7 @@ void VariantNetEditorScreen::init_editor_from_topology() {
         viewer_state_.network = &networks_[0];
     }
     viewer_state_.ship_design = ship_design_;
+    viewer_state_.net_type = net_type_;
 }
 
 void VariantNetEditorScreen::on_draw(

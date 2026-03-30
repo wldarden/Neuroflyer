@@ -1,6 +1,7 @@
 #pragma once
 
 #include <neuroflyer/ship_design.h>
+#include <neuroflyer/snapshot.h>
 
 #include <neuralnet/network.h>
 #include <neuralnet-ui/render_neural_net.h>
@@ -21,6 +22,8 @@ struct VariantNetConfig {
     std::vector<float> input_values;
     int mouse_x = -1;
     int mouse_y = -1;
+
+    NetType net_type = NetType::Solo;
 };
 
 /// Render a neural net with NeuroFlyer-specific labels, colors, and ordering.

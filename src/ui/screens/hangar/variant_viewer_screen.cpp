@@ -295,6 +295,7 @@ VariantViewerScreen::Action VariantViewerScreen::draw_squad_actions(
                 std::chrono::duration_cast<std::chrono::seconds>(
                     std::chrono::system_clock::now().time_since_epoch()).count();
             snap.parent_name = "";
+            snap.net_type = NetType::SquadLeader;
             snap.topology = ind.topology;
             snap.weights = ind.genome.flatten("layer_");
             // ship_design left default — squad nets don't have sensors
@@ -1148,7 +1149,7 @@ void VariantViewerScreen::on_draw(
                     auto net = ind.build_network();
                     ui.push_screen(std::make_unique<VariantNetEditorScreen>(
                         std::move(ind), std::move(net), snap.ship_design,
-                        var_path, sel_var.name));
+                        var_path, sel_var.name, snap.net_type));
                 } catch (const std::exception& e) {
                     std::cerr
                         << "Failed to load variant for viewing: "
@@ -1260,7 +1261,7 @@ void VariantViewerScreen::on_draw(
                     auto net = ind.build_network();
                     ui.push_screen(std::make_unique<VariantNetEditorScreen>(
                         std::move(ind), std::move(net), snap.ship_design,
-                        sq_path, sel_sq.name));
+                        sq_path, sel_sq.name, snap.net_type));
                 } catch (const std::exception& e) {
                     std::cerr
                         << "Failed to load squad variant for viewing: "

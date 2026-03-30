@@ -343,7 +343,7 @@ void HangarScreen::on_draw(AppState& state, Renderer& renderer, UIManager& ui) {
                     auto net = ind.build_network();
                     ui.push_screen(std::make_unique<VariantNetEditorScreen>(
                         std::move(ind), std::move(net), snap.ship_design,
-                        genome_path, snap.name));
+                        genome_path, snap.name, snap.net_type));
                 } catch (const std::exception& e) {
                     std::cerr << "Failed to load genome for viewer: "
                               << e.what() << "\n";

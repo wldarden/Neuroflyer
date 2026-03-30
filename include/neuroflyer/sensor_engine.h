@@ -95,4 +95,10 @@ struct DecodedOutput {
 /// Data order is unchanged — this is purely a visual rearrangement.
 [[nodiscard]] std::vector<std::size_t> build_display_order(const ShipDesign& design);
 
+/// Build input labels for a squad leader network (14 strategic inputs).
+[[nodiscard]] std::vector<std::string> build_squad_leader_input_labels();
+
+/// Build output labels for a squad leader network (5 tactical orders).
+[[nodiscard]] std::vector<std::string> build_squad_leader_output_labels();
+
 } // namespace neuroflyer

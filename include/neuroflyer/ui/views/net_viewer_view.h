@@ -2,6 +2,7 @@
 
 #include <neuroflyer/evolution.h>
 #include <neuroflyer/ship_design.h>
+#include <neuroflyer/snapshot.h>
 #include <neuralnet/network.h>
 #include <neuralnet-ui/net_background.h>
 #include <neuralnet-ui/render_neural_net.h>
@@ -25,6 +26,7 @@ struct NetViewerViewState {
     Individual* individual = nullptr;    // non-owning pointer
     neuralnet::Network* network = nullptr;
     ShipDesign ship_design;
+    NetType net_type = NetType::Solo;    // determines label set used by renderer
     std::vector<float> input_values;     // empty = no input display
 
     // Render area (set by owning screen)
