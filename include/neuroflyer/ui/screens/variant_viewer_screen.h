@@ -46,6 +46,12 @@ private:
     int squad_selected_idx_ = 0;
     std::string paired_fighter_name_;
 
+    // Create squad net modal state
+    bool show_create_squad_modal_ = false;
+    char squad_net_name_[64] = "";
+    int squad_hidden_layers_ = 1;
+    int squad_layer_sizes_[4] = {8, 4, 4, 4};
+
     // Pending modal results (set by callbacks, processed in on_draw)
     bool promote_pending_ = false;
     std::string promote_name_;

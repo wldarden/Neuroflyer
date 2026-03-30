@@ -189,11 +189,136 @@ VariantViewerScreen::Action VariantViewerScreen::draw_squad_list(
 // ==================== Squad action panel ====================
 
 VariantViewerScreen::Action VariantViewerScreen::draw_squad_actions(
-    AppState& /*state*/, UIManager& /*ui*/, float /*content_h*/) {
+    AppState& state, UIManager& /*ui*/, float /*content_h*/) {
     Action action = Action::Stay;
 
     constexpr float BTN_W = 280.0f;
     constexpr float BTN_H = 35.0f;
+
+    // ---- Create Squad Net ----
+    if (ImGui::Button("Create Squad Net", ImVec2(BTN_W, BTN_H))) {
+        show_create_squad_modal_ = true;
+        squad_net_name_[0] = '\0';
+        squad_hidden_layers_ = 1;
+        squad_layer_sizes_[0] = 8;
+        squad_layer_sizes_[1] = 4;
+        squad_layer_sizes_[2] = 4;
+        squad_layer_sizes_[3] = 4;
+        ImGui::OpenPopup("Create Squad Net##modal");
+    }
+
+    // ---- Create Squad Net modal ----
+    if (show_create_squad_modal_) {
+        ImGui::OpenPopup("Create Squad Net##modal");
+    }
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(380, 0), ImGuiCond_Appearing);
+    if (ImGui::BeginPopupModal("Create Squad Net##modal", &show_create_squad_modal_,
+            ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Name:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(250);
+        ImGui::InputText("##squad_name", squad_net_name_, sizeof(squad_net_name_));
+
+        ImGui::Dummy(ImVec2(0, 5));
+        ImGui::Text("Hidden Layers:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(150);
+        ImGui::SliderInt("##squad_layers", &squad_hidden_layers_, 1, 4);
+
+        ImGui::Dummy(ImVec2(0, 3));
+        for (int i = 0; i < squad_hidden_layers_; ++i) {
+            char label[32];
+            std::snprintf(label, sizeof(label), "Layer %d Size:", i + 1);
+            ImGui::Text("%s", label);
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(150);
+            char slider_id[32];
+            std::snprintf(slider_id, sizeof(slider_id), "##squad_lsize_%d", i);
+            ImGui::SliderInt(slider_id, &squad_layer_sizes_[i], 1, 32);
+        }
+
+        ImGui::Dummy(ImVec2(0, 10));
+
+        // Validation
+        bool name_valid = is_valid_name(squad_net_name_);
+        bool name_empty = (squad_net_name_[0] == '\0');
+
+        // Check for duplicate names
+        bool name_duplicate = false;
+        if (name_valid) {
+            for (const auto& sv : squad_variants_) {
+                if (sv.name == squad_net_name_) {
+                    name_duplicate = true;
+                    break;
+                }
+            }
+        }
+
+        if (!name_empty && !name_valid) {
+            ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f),
+                "Invalid name (alphanumeric, -, _ only)");
+        }
+        if (name_duplicate) {
+            ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f),
+                "A squad net with this name already exists");
+        }
+
+        bool can_create = name_valid && !name_duplicate;
+
+        float button_w = 120.0f;
+        float spacing = ImGui::GetContentRegionAvail().x - button_w * 2;
+        if (ImGui::Button("Cancel", ImVec2(button_w, 30))) {
+            show_create_squad_modal_ = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine(0, spacing);
+        if (!can_create) ImGui::BeginDisabled();
+        if (ImGui::Button("Create", ImVec2(button_w, 30))) {
+            // Build hidden_sizes vector
+            std::vector<std::size_t> hidden_sizes;
+            for (int i = 0; i < squad_hidden_layers_; ++i) {
+                hidden_sizes.push_back(
+                    static_cast<std::size_t>(squad_layer_sizes_[i]));
+            }
+
+            // Create random individual with squad leader topology
+            auto ind = Individual::random(14, hidden_sizes, 5, state.rng);
+
+            // Build snapshot
+            Snapshot snap;
+            snap.name = squad_net_name_;
+            snap.generation = 0;
+            snap.created_timestamp =
+                std::chrono::duration_cast<std::chrono::seconds>(
+                    std::chrono::system_clock::now().time_since_epoch()).count();
+            snap.parent_name = "";
+            snap.topology = ind.topology;
+            snap.weights = ind.genome.flatten("layer_");
+            // ship_design left default — squad nets don't have sensors
+
+            try {
+                save_squad_variant(vs_.genome_dir, snap);
+                std::cout << "Created squad net '" << snap.name << "'\n";
+                state.variants_dirty = true;
+            } catch (const std::exception& e) {
+                std::cerr << "Failed to create squad net: "
+                          << e.what() << "\n";
+            }
+
+            show_create_squad_modal_ = false;
+            ImGui::CloseCurrentPopup();
+        }
+        if (!can_create) ImGui::EndDisabled();
+
+        ImGui::EndPopup();
+    }
+
+    ImGui::Dummy(ImVec2(0, 10));
+    ImGui::Separator();
+    ImGui::Dummy(ImVec2(0, 5));
 
     // ---- Training Scenarios ----
     ImGui::TextColored(
