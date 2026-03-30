@@ -1,4 +1,5 @@
 #include <neuroflyer/ui/screens/fighter_drill_screen.h>
+#include <neuroflyer/ui/screens/fighter_drill_pause_screen.h>
 #include <neuroflyer/ui/ui_manager.h>
 
 #include <neuroflyer/app_state.h>
@@ -231,9 +232,16 @@ void FighterDrillScreen::handle_input(UIManager& ui) {
     if (keys[SDL_SCANCODE_3]) ticks_per_frame_ = 20;
     if (keys[SDL_SCANCODE_4]) ticks_per_frame_ = 100;
 
-    // Space: pause (placeholder — Task 7 will wire real pause screen)
+    // Space: open pause screen
     if (ImGui::IsKeyPressed(ImGuiKey_Space)) {
-        paused_ = !paused_;
+        paused_ = true;
+        ui.push_screen(std::make_unique<FighterDrillPauseScreen>(
+            population_, generation_, ship_design_,
+            genome_dir_, variant_name_, evo_config_,
+            [this](const EvolutionConfig& updated_config) {
+                evo_config_ = updated_config;
+                paused_ = false;
+            }));
     }
 
     // Escape: exit
