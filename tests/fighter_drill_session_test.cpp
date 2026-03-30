@@ -319,3 +319,60 @@ TEST(FighterDrillSessionTest, ContractPhaseRewardsMovingToward) {
     EXPECT_GT(delta_0, 0.0f);
     EXPECT_LT(delta_1, 0.0f);
 }
+
+// ── Task 9 tests ─────────────────────────────────────────────────────────────
+
+TEST(FighterDrillSessionTest, FullDrillRun) {
+    nf::FighterDrillConfig config;
+    config.population_size = 10;
+    config.tower_count = 5;
+    config.token_count = 3;
+    config.phase_duration_ticks = 10;
+
+    nf::FighterDrillSession session(config, 42);
+
+    for (uint32_t i = 0; i < 30; ++i) {
+        for (std::size_t s = 0; s < 10; ++s) {
+            session.set_ship_actions(s,
+                (i + s) % 3 == 0,
+                (i + s) % 5 == 0,
+                (i + s) % 2 == 0,
+                (i + s) % 7 == 0,
+                (i + s) % 4 == 0);
+        }
+        session.tick();
+    }
+
+    EXPECT_TRUE(session.is_over());
+    EXPECT_EQ(session.current_tick(), 30u);
+
+    auto scores = session.get_scores();
+    EXPECT_EQ(scores.size(), 10u);
+
+    bool any_nonzero = false;
+    for (float s : scores) {
+        if (std::abs(s) > 0.001f) any_nonzero = true;
+    }
+    EXPECT_TRUE(any_nonzero);
+}
+
+TEST(FighterDrillSessionTest, DeadShipsDontScore) {
+    nf::FighterDrillConfig config;
+    config.population_size = 2;
+    config.tower_count = 0;
+    config.token_count = 0;
+    config.phase_duration_ticks = 10;
+    nf::FighterDrillSession session(config, 42);
+
+    session.ships()[1].alive = false;
+
+    for (int i = 0; i < 5; ++i) {
+        session.set_ship_actions(0, true, false, false, false, false);
+        session.set_ship_actions(1, true, false, false, false, false);
+        session.tick();
+    }
+
+    auto scores = session.get_scores();
+    EXPECT_NE(scores[0], 0.0f);
+    EXPECT_FLOAT_EQ(scores[1], 0.0f);
+}
