@@ -412,8 +412,8 @@ VariantViewerScreen::Action VariantViewerScreen::draw_variant_list(
             std::cerr << "Failed to list variants: " << e.what() << "\n";
             vs_.variants.clear();
         }
-        vs_.selected_idx = std::clamp(vs_.selected_idx, 0,
-            std::max(0, static_cast<int>(vs_.variants.size()) - 1));
+        vs_.selected_idx = std::clamp(vs_.selected_idx, -1,
+            std::max(-1, static_cast<int>(vs_.variants.size()) - 1));
 
         // Also refresh squad variants
         try {
@@ -558,10 +558,7 @@ VariantViewerScreen::Action VariantViewerScreen::draw_variant_list(
                     ImGuiTableColumnFlags_None, 0.32f);
                 ImGui::TableHeadersRow();
 
-                for (int fi = 0;
-                     fi < static_cast<int>(filtered_indices.size()); ++fi) {
-                    const int i = filtered_indices[
-                        static_cast<std::size_t>(fi)];
+                for (const int i : filtered_indices) {
                     const auto& v =
                         vs_.variants[static_cast<std::size_t>(i)];
                     ImGui::TableNextRow();
@@ -572,9 +569,12 @@ VariantViewerScreen::Action VariantViewerScreen::draw_variant_list(
                     if (v.net_type == NetType::Fighter) {
                         ImGui::TextColored(
                             ImVec4(0.64f, 0.61f, 0.99f, 1.0f), "[SQUAD]");
-                    } else {
+                    } else if (v.net_type == NetType::Solo) {
                         ImGui::TextColored(
                             ImVec4(0.0f, 0.82f, 0.83f, 1.0f), "[SOLO]");
+                    } else {
+                        ImGui::TextColored(
+                            ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "[?]");
                     }
                     ImGui::SameLine();
 
