@@ -37,7 +37,7 @@ private:
     // Variant list state (fighters)
     struct VariantScreenState {
         std::vector<SnapshotHeader> variants;
-        int selected_idx = 0;
+        int selected_idx = -1;
         std::string genome_name;
         std::string genome_dir;
         bool show_lineage = false;
