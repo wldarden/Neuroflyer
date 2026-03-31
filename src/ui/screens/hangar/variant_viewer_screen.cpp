@@ -526,7 +526,22 @@ VariantViewerScreen::Action VariantViewerScreen::draw_variant_list(
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
                 "(no variants found)");
         } else {
-            if (ImGui::BeginTable("##VarTable", 5,
+            // Build filtered index list
+            std::vector<int> filtered_indices;
+            filtered_indices.reserve(vs_.variants.size());
+            for (int i = 0;
+                 i < static_cast<int>(vs_.variants.size()); ++i) {
+                const auto& v =
+                    vs_.variants[static_cast<std::size_t>(i)];
+                if (is_visible(fighter_filter_, v.net_type)) {
+                    filtered_indices.push_back(i);
+                }
+            }
+
+            if (filtered_indices.empty()) {
+                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
+                    "(no variants match filter)");
+            } else if (ImGui::BeginTable("##VarTable", 5,
                     ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg |
                     ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp,
                     ImVec2(0, content_h - 100.0f))) {
@@ -543,13 +558,26 @@ VariantViewerScreen::Action VariantViewerScreen::draw_variant_list(
                     ImGuiTableColumnFlags_None, 0.32f);
                 ImGui::TableHeadersRow();
 
-                for (int i = 0;
-                     i < static_cast<int>(vs_.variants.size()); ++i) {
+                for (int fi = 0;
+                     fi < static_cast<int>(filtered_indices.size()); ++fi) {
+                    const int i = filtered_indices[
+                        static_cast<std::size_t>(fi)];
                     const auto& v =
                         vs_.variants[static_cast<std::size_t>(i)];
                     ImGui::TableNextRow();
 
                     ImGui::TableNextColumn();
+
+                    // Type badge
+                    if (v.net_type == NetType::Fighter) {
+                        ImGui::TextColored(
+                            ImVec4(0.64f, 0.61f, 0.99f, 1.0f), "[SQUAD]");
+                    } else {
+                        ImGui::TextColored(
+                            ImVec4(0.0f, 0.82f, 0.83f, 1.0f), "[SOLO]");
+                    }
+                    ImGui::SameLine();
+
                     bool is_selected = (vs_.selected_idx == i);
                     if (ImGui::Selectable(v.name.c_str(), is_selected,
                             ImGuiSelectableFlags_SpanAllColumns)) {
