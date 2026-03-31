@@ -1,7 +1,11 @@
+#include <neuroflyer/arena_config.h>
 #include <neuroflyer/arena_sensor.h>
+#include <neuroflyer/sensor_engine.h>
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <string>
 
 namespace neuroflyer {
 
@@ -12,10 +16,12 @@ namespace {
 /// is at (ox+dx, oy+dy). range is the actual ray length for normalization.
 float ray_circle_hit(float ox, float oy, float dx, float dy, float range,
                      float cx, float cy, float cr) {
+    if (range < 1e-6f) return 1.0f;  // guard against division by zero
     // Use f = O - C (same convention as collision.h ray_circle_intersect)
     float fx = ox - cx;
     float fy = oy - cy;
     float a = dx * dx + dy * dy;
+    if (a < 1e-12f) return 1.0f;
     float b = 2.0f * (fx * dx + fy * dy);
     float c_val = fx * fx + fy * fy - cr * cr;
     float disc = b * b - 4.0f * a * c_val;
@@ -28,18 +34,15 @@ float ray_circle_hit(float ox, float oy, float dx, float dy, float range,
     return std::min(dist / range, 1.0f);
 }
 
-} // namespace
-
-ArenaSensorReading query_arena_sensor(
+/// Raycast path: cast a ray at abs_angle with sensor.range against all arena entities.
+ArenaSensorReading query_arena_raycast(
     const SensorDef& sensor,
     const ArenaQueryContext& ctx) {
 
-    // Ray direction: rotation 0 = facing up, sensor.angle relative to ship rotation
     float abs_angle = ctx.ship_rotation + sensor.angle;
     float ray_dir_x = std::sin(abs_angle);
     float ray_dir_y = -std::cos(abs_angle);
 
-    // Full ray vector (origin + this vector = ray tip)
     float dx = ray_dir_x * sensor.range;
     float dy = ray_dir_y * sensor.range;
 
@@ -53,7 +56,6 @@ ArenaSensorReading query_arena_sensor(
         }
     };
 
-    // Check towers
     for (const auto& tower : ctx.towers) {
         if (!tower.alive) continue;
         float d = ray_circle_hit(ctx.ship_x, ctx.ship_y, dx, dy, sensor.range,
@@ -61,7 +63,6 @@ ArenaSensorReading query_arena_sensor(
         update_closest(d, ArenaHitType::Tower);
     }
 
-    // Check tokens
     for (const auto& token : ctx.tokens) {
         if (!token.alive) continue;
         float d = ray_circle_hit(ctx.ship_x, ctx.ship_y, dx, dy, sensor.range,
@@ -69,7 +70,6 @@ ArenaSensorReading query_arena_sensor(
         update_closest(d, ArenaHitType::Token);
     }
 
-    // Check ships (skip self, classify friend/enemy)
     for (std::size_t i = 0; i < ctx.ships.size(); ++i) {
         if (i == ctx.self_index) continue;
         const auto& ship = ctx.ships[i];
@@ -82,8 +82,6 @@ ArenaSensorReading query_arena_sensor(
                                     : ArenaHitType::EnemyShip);
     }
 
-    // Check bullets (skip own bullets)
-    constexpr float BULLET_RADIUS = 2.0f;
     for (const auto& bullet : ctx.bullets) {
         if (!bullet.alive) continue;
         if (bullet.owner_index == static_cast<int>(ctx.self_index)) continue;
@@ -95,6 +93,107 @@ ArenaSensorReading query_arena_sensor(
     return {closest, closest_type};
 }
 
+/// Occulus path: place a rotated ellipse and check point-in-ellipse for all arena entities.
+/// Uses compute_sensor_shape() with the absolute angle (ship_rotation + sensor.angle)
+/// so the ellipse rotates with the ship.
+ArenaSensorReading query_arena_occulus(
+    const SensorDef& sensor,
+    const ArenaQueryContext& ctx) {
+
+    // Build a rotated sensor def so compute_sensor_shape uses the absolute angle
+    SensorDef rotated = sensor;
+    rotated.angle = ctx.ship_rotation + sensor.angle;
+
+    auto shape = compute_sensor_shape(rotated, ctx.ship_x, ctx.ship_y);
+
+    float cx = shape.center_x;
+    float cy = shape.center_y;
+    float major_radius = shape.major_radius;
+    float minor_radius = std::max(shape.minor_radius, 0.01f);
+    float cos_r = std::cos(shape.rotation);
+    float sin_r = std::sin(shape.rotation);
+
+    float closest_dist = 1.0f;
+    ArenaHitType closest_type = ArenaHitType::Nothing;
+
+    // Ellipse overlap check — same math as sensor_engine.cpp query_occulus().
+    // Returns normalized distance [0,1] if inside ellipse, -1 if outside.
+    float max_reach = SHIP_SENSOR_GAP + major_radius * 2.0f;
+
+    auto check_overlap = [&](float ox, float oy, float obj_r) -> float {
+        float ddx = ox - cx;
+        float ddy = oy - cy;
+        float lmaj = ddx * cos_r + ddy * sin_r;
+        float lmin = -ddx * sin_r + ddy * cos_r;
+        float eff_maj = major_radius + obj_r;
+        float eff_min = minor_radius + obj_r;
+        float val = (lmaj * lmaj) / (eff_maj * eff_maj) +
+                    (lmin * lmin) / (eff_min * eff_min);
+        if (val <= 1.0f) {
+            float obj_dx = ox - ctx.ship_x;
+            float obj_dy = oy - ctx.ship_y;
+            float center_dist_val = std::sqrt(obj_dx * obj_dx + obj_dy * obj_dy);
+            float edge_dist = std::max(0.0f, center_dist_val - obj_r);
+            return std::min(edge_dist / max_reach, 1.0f);
+        }
+        return -1.0f;
+    };
+
+    auto update_closest = [&](float d, ArenaHitType type) {
+        if (d >= 0.0f && d < closest_dist) {
+            closest_dist = d;
+            closest_type = type;
+        }
+    };
+
+    for (const auto& tower : ctx.towers) {
+        if (!tower.alive) continue;
+        update_closest(check_overlap(tower.x, tower.y, tower.radius),
+                       ArenaHitType::Tower);
+    }
+
+    for (const auto& token : ctx.tokens) {
+        if (!token.alive) continue;
+        update_closest(check_overlap(token.x, token.y, token.radius),
+                       ArenaHitType::Token);
+    }
+
+    for (std::size_t i = 0; i < ctx.ships.size(); ++i) {
+        if (i == ctx.self_index) continue;
+        const auto& ship = ctx.ships[i];
+        if (!ship.alive) continue;
+        bool is_friend = (i < ctx.ship_teams.size() &&
+                          ctx.ship_teams[i] == ctx.self_team);
+        update_closest(check_overlap(ship.x, ship.y, Triangle::SIZE),
+                       is_friend ? ArenaHitType::FriendlyShip
+                                 : ArenaHitType::EnemyShip);
+    }
+
+    for (const auto& bullet : ctx.bullets) {
+        if (!bullet.alive) continue;
+        if (bullet.owner_index == static_cast<int>(ctx.self_index)) continue;
+        update_closest(check_overlap(bullet.x, bullet.y, BULLET_RADIUS),
+                       ArenaHitType::Bullet);
+    }
+
+    return {closest_dist, closest_type};
+}
+
+} // namespace
+
+ArenaSensorReading query_arena_sensor(
+    const SensorDef& sensor,
+    const ArenaQueryContext& ctx) {
+
+    switch (sensor.type) {
+    case SensorType::Occulus:
+        return query_arena_occulus(sensor, ctx);
+    case SensorType::Raycast:
+    default:
+        return query_arena_raycast(sensor, ctx);
+    }
+}
+
 DirRange compute_dir_range(
     float from_x, float from_y,
     float to_x, float to_y,
@@ -104,6 +203,7 @@ DirRange compute_dir_range(
     float dy = to_y - from_y;
     float distance = std::sqrt(dx * dx + dy * dy);
     float world_diag = std::sqrt(world_w * world_w + world_h * world_h);
+    if (world_diag < 1e-6f) world_diag = 1.0f;
 
     DirRange result;
     if (distance > 1e-6f) {
@@ -119,7 +219,7 @@ std::size_t compute_arena_input_size(const ShipDesign& design) {
     for (const auto& s : design.sensors) {
         sensor_values += s.is_full_sensor ? 5 : 1;
     }
-    return sensor_values + 6 + design.memory_slots;
+    return sensor_values + ArenaConfig::squad_leader_fighter_inputs + design.memory_slots;
 }
 
 std::vector<float> build_arena_ship_input(
@@ -165,6 +265,91 @@ std::vector<float> build_arena_ship_input(
     input.insert(input.end(), memory.begin(), memory.end());
 
     return input;
+}
+
+std::vector<std::string> build_arena_fighter_input_labels(const ShipDesign& design) {
+    std::vector<std::string> labels;
+
+    // Sensor labels: 5 per full sensor, 1 per sight sensor.
+    int sensor_idx = 0;
+    for (const auto& s : design.sensors) {
+        char buf[32];
+        if (!s.is_full_sensor) {
+            std::snprintf(buf, sizeof(buf), "SNS %d D", sensor_idx);
+            labels.push_back(buf);
+        } else {
+            std::snprintf(buf, sizeof(buf), "SNS %d D", sensor_idx);
+            labels.push_back(buf);
+            std::snprintf(buf, sizeof(buf), "SNS %d TWR", sensor_idx);
+            labels.push_back(buf);
+            std::snprintf(buf, sizeof(buf), "SNS %d TKN", sensor_idx);
+            labels.push_back(buf);
+            std::snprintf(buf, sizeof(buf), "SNS %d FRD", sensor_idx);
+            labels.push_back(buf);
+            std::snprintf(buf, sizeof(buf), "SNS %d BLT", sensor_idx);
+            labels.push_back(buf);
+        }
+        ++sensor_idx;
+    }
+
+    // Squad leader inputs (6).
+    labels.push_back("TGT HDG");
+    labels.push_back("TGT DST");
+    labels.push_back("CTR HDG");
+    labels.push_back("CTR DST");
+    labels.push_back("AGG");
+    labels.push_back("SPC");
+
+    // Memory.
+    for (uint16_t m = 0; m < design.memory_slots; ++m) {
+        char buf[16];
+        std::snprintf(buf, sizeof(buf), "MEM %d", m);
+        labels.push_back(buf);
+    }
+
+    return labels;
+}
+
+std::vector<NodeStyle> build_arena_fighter_input_colors(const ShipDesign& design) {
+    std::vector<NodeStyle> colors;
+
+    // Sensor colors: sight = green, full sensor = purple (matching Solo convention).
+    constexpr NodeStyle sight_color  = { 60, 200,  80};   // green
+    constexpr NodeStyle sensor_color = {160,  90, 220};    // purple
+    constexpr NodeStyle squad_color  = {220, 180,  40};    // yellow for squad leader inputs
+    constexpr NodeStyle memory_color = {220,  70,  70};    // red for memory
+
+    for (const auto& s : design.sensors) {
+        if (!s.is_full_sensor) {
+            colors.push_back(sight_color);
+        } else {
+            for (int j = 0; j < 5; ++j) {
+                colors.push_back(sensor_color);
+            }
+        }
+    }
+
+    // Squad leader inputs.
+    for (std::size_t i = 0; i < ArenaConfig::squad_leader_fighter_inputs; ++i) {
+        colors.push_back(squad_color);
+    }
+
+    // Memory.
+    for (uint16_t m = 0; m < design.memory_slots; ++m) {
+        colors.push_back(memory_color);
+    }
+
+    return colors;
+}
+
+std::vector<std::size_t> build_arena_fighter_display_order(const ShipDesign& design) {
+    // Identity permutation — no reordering needed for arena fighter nets.
+    std::size_t total = compute_arena_input_size(design);
+    std::vector<std::size_t> order(total);
+    for (std::size_t i = 0; i < total; ++i) {
+        order[i] = i;
+    }
+    return order;
 }
 
 } // namespace neuroflyer

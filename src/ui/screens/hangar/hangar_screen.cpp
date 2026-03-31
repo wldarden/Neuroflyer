@@ -77,10 +77,13 @@ void HangarScreen::refresh_genomes(AppState& state) {
                     if (v.created_timestamp > latest_ts)
                         latest_ts = v.created_timestamp;
                 }
-            } catch (...) {}
+            } catch (const std::exception& e) {
+                std::cerr << "Failed to load variants: " << e.what() << "\n";
+            }
             preview_.genome_timestamps.push_back(
                 format_short_date(latest_ts));
-        } catch (...) {
+        } catch (const std::exception& e) {
+            std::cerr << "Failed to load genome: " << e.what() << "\n";
             preview_.genome_topologies.push_back({});
             preview_.genome_designs.push_back({});
             preview_.genome_timestamps.push_back("---");

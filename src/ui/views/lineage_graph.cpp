@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <iostream>
 #include <unordered_map>
 
 namespace neuroflyer {
@@ -29,7 +30,8 @@ void rebuild_lineage_graph(LineageGraphState& state, const std::string& genome_d
     nlohmann::json j;
     try {
         j = nlohmann::json::parse(f);
-    } catch (...) {
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to parse lineage: " << e.what() << "\n";
         return;
     }
 

@@ -17,6 +17,7 @@
 #include <SDL.h>
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <filesystem>
 #include <iostream>
@@ -43,6 +44,9 @@ void ArenaGameScreen::on_enter() {
 // ==================== Initialization ====================
 
 void ArenaGameScreen::initialize(AppState& state) {
+    // Arena currently only supports exactly 2 teams
+    assert(config_.num_teams == 2 && "Arena mode requires exactly 2 teams");
+
     // Create team population
     // If pending population exists, use a legacy ship design. Otherwise create fresh.
     if (!state.pending_population.empty()) {

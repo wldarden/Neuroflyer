@@ -341,3 +341,90 @@ All new UI features MUST use the 4-layer UI framework. Do NOT create standalone 
 - **Sensor engine as single source of truth** — one set of functions for detection, input encoding, and output decoding. No inline math in screens. Visual sorting via display permutation (doesn't affect functional data order).
 - **ShipDesign per variant, not global** — sensor config lives on each saved variant, not on GameConfig. Editing one variant's sensors doesn't affect others.
 - **Shared library repos** — neuralnet and evolve are independent repos shared by EcoSim, NeuroFlyer, and AntSim
+
+## Standards & Practices
+
+### Universal Principles
+
+**No magic numbers or duplicated literals.** When the same value appears in multiple places, use named `constexpr` constants, config objects, or enums. A value that appears once in a clear context is fine — the problem is duplication and opacity. Follow the pattern in `game.cpp` (`EASY_PHASE`, `RAMP_INTERVAL`, `BASE_GAP_MIN`).
+
+**DRY — Don't Repeat Yourself.** Every piece of knowledge should have a single, authoritative representation. When the same logic exists in multiple places, extract it. Critical nuance: DRY applies to *knowledge*, not to code that merely looks similar. Two blocks that look alike but represent different concepts should stay separate — merging them creates false coupling. Test: "if I change this, should it change everywhere?" If yes, centralize. If no, the duplication is coincidental.
+
+**Separation of concerns.** Business logic, simulation logic, and game logic live in pure modules with no UI dependencies. UI code calls into the logic layer — not the other way around. Apply rigorously at module/layer boundaries; within a single small module, less critical.
+
+**Meaningful naming over comments.** A well-named function communicates intent without needing a comment. `build_ship_input()` beats `process()`. Comments should explain *why*, not *what*. Module-level comments explaining purpose and invariants are worthwhile; inline comments restating the code are noise.
+
+**Minimize scope.** Declare variables as close to their use as possible, in the narrowest scope possible. Keep functions focused on one conceptual operation. Smaller scope = fewer surprises.
+
+**Composition over inheritance.** Use inheritance for genuine "is-a" relationships (`UIScreen`, `UIView`, `UIModal`). Use composition — callbacks, interfaces, member objects — for everything else. If you're more than 2-3 levels deep in an inheritance chain, reconsider.
+
+**Defensive programming at boundaries.** Validate inputs at trust boundaries — file I/O, user input, external APIs. Inside your own code, use assertions to verify invariants (things that should always be true if the code is correct). Assertions catch bugs early; boundary validation catches bad input.
+
+**Immutability by default.** Declare variables `const`, parameters `const&`, methods `const` unless they genuinely need to mutate. Mutable state should be the exception that needs justification, not the default.
+
+**Don't live with broken windows.** One hack invites another. If you see something wrong while working on something else, fix it or flag it. Don't make things worse.
+
+### C++20 Idioms
+
+- **`constexpr` over `const`** for compile-time constants. Use `constexpr` for values known at compile time; reserve `const` for runtime-immutable values.
+- **`[[nodiscard]]`** on non-void functions whose return value shouldn't be ignored — especially predicates, factory functions, and anything returning a result that indicates success/failure.
+- **`enum class` over plain `enum`** — always. Scoped enums prevent implicit conversions and namespace pollution.
+- **`std::span` or `const&`** for non-owning views of contiguous data at function boundaries. Avoid unnecessary copies.
+- **`#pragma once`** for all header include guards.
+- **Structured bindings** (`const auto& [name, parent, gen] = ...`) where they improve readability.
+- **Range-based for loops** as the default iteration pattern.
+
+### Naming Conventions
+
+| Element | Convention | Example |
+|---------|-----------|---------|
+| Files | `snake_case` | `evolution.cpp`, `hangar_screen.h` |
+| Functions | `snake_case` | `build_ship_input()`, `query_sensor()` |
+| Classes/Structs | `PascalCase` | `GameSession`, `ShipDesign`, `UIScreen` |
+| Private members | `snake_case_` (trailing underscore) | `selected_genome_idx_`, `genomes_` |
+| Public members | `snake_case` (no trailing underscore) | `alive`, `score` |
+| Constants | `UPPER_SNAKE_CASE` | `SCREEN_W`, `ACTION_COUNT` |
+| Enum types | `PascalCase` | `SensorType`, `ButtonStyle` |
+| Enum values | `PascalCase` | `Raycast`, `Occulus`, `Tanh` |
+| Namespaces | `snake_case` | `neuroflyer`, `neuroflyer::ui` |
+
+### Engine/UI Boundary
+
+`src/engine/` must **never** include SDL, ImGui, or any rendering header. This is the project's strongest architectural invariant. Engine code is pure logic — testable, portable, and free of graphical dependencies. If you need rendering data in engine code, pass it as plain data (floats, vectors, structs) through function parameters.
+
+`src/ui/` wraps engine calls and handles all rendering. When engine code needs to communicate results that the UI will display, use return values or output parameters — not callbacks into UI code.
+
+### UI Framework Compliance
+
+All new UI features use the 4-layer architecture (Screen → View → Modal → Widget). Specifically:
+
+- **No static locals for UI state.** All state lives as member variables on the screen/view/modal class. Static locals cause bugs when re-entering screens and make state invisible to the class interface.
+- **No `go_to_screen()` in new code.** Use `ui.push_screen()` / `ui.pop_screen()` / `ui.replace_screen()`.
+- **Components take data + callbacks, not UIManager.** Screens wire component callbacks to navigation actions. This keeps components reusable across screens.
+- **Use `ui::` widgets** for buttons, sliders, inputs — not raw ImGui calls for styled controls.
+- **Modals for popups**, not inline dialog state tracked with booleans on screens.
+
+### Test Expectations
+
+- **Framework:** Google Test with test fixtures (`::testing::Test`).
+- **Location:** All tests in `tests/`. One test file per module or logical grouping.
+- **Fixture pattern:** `SetUp()` creates temp directories or test data; `TearDown()` cleans up. Use RAII (filesystem temp paths) for automatic cleanup.
+- **Assertions:** `ASSERT_*` for preconditions that make the rest of the test meaningless if they fail. `EXPECT_*` for checks where the test should continue to report all failures.
+- **Engine testability:** All engine logic must be testable without SDL or ImGui. If a function can't be tested without a renderer, it belongs in `src/ui/`, not `src/engine/`.
+- **Test what matters:** Focus on behavior (what the function does), not implementation details (how it does it). Don't test private internals — test through the public API.
+
+### Memory Management
+
+- **`std::unique_ptr`** for exclusive ownership (screens, modals, sessions).
+- **No raw `new`/`delete`.** Use `std::make_unique` for heap allocation.
+- **Stack allocation by default.** Only heap-allocate when ownership transfer or polymorphism requires it.
+- **`const&`** for read-only access to existing objects. **`std::move`** for transferring ownership.
+- **Containers own their elements.** `std::vector<Individual>` owns the individuals; pass `const&` or `std::span` for read-only views.
+
+### Error Handling
+
+- **Exceptions** for I/O failures, serialization errors, and external operation failures (`std::runtime_error`, `std::invalid_argument`). These are recoverable — catch them at UI boundaries and log/display the error.
+- **Assertions** (`assert()`) for internal invariants — conditions that should always be true if the code is correct. These catch bugs during development.
+- **Early returns** for invalid conditions: `if (!tower.alive) continue;` — clear, readable, avoids deep nesting.
+- **No bare `catch(...)`** in new code. Always catch a specific exception type and log the error. Swallowing errors silently hides bugs.
+- **Log errors with context:** Include what operation failed and why, not just "error occurred". Use `std::cerr` with the exception message.

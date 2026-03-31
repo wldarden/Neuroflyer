@@ -1,5 +1,6 @@
 #include <neuroflyer/renderers/variant_net_render.h>
 
+#include <neuroflyer/arena_sensor.h>
 #include <neuroflyer/sensor_engine.h>
 #include <neuroflyer/ship_design.h>
 
@@ -20,7 +21,8 @@ neuralnet_ui::NetRenderConfig build_variant_net_config(
     std::vector<neuralnet_ui::NodeColor> input_colors;
     std::vector<std::size_t> order;
 
-    if (config.net_type == NetType::SquadLeader) {
+    switch (config.net_type) {
+    case NetType::SquadLeader: {
         // Squad leader: fixed strategic inputs, no sensors.
         labels = build_squad_leader_input_labels();
         input_colors.reserve(labels.size());
@@ -32,8 +34,41 @@ neuralnet_ui::NetRenderConfig build_variant_net_config(
         for (std::size_t i = 0; i < labels.size(); ++i) {
             order[i] = i;
         }
-    } else {
-        // Solo / Fighter: sensor-based labels from ShipDesign.
+        break;
+    }
+    case NetType::Fighter: {
+        // Arena fighter: sensor labels + squad leader inputs + memory.
+        labels = build_arena_fighter_input_labels(config.ship_design);
+        auto nf_colors = build_arena_fighter_input_colors(config.ship_design);
+        input_colors.reserve(nf_colors.size());
+        for (const auto& c : nf_colors) {
+            input_colors.push_back({c.r, c.g, c.b});
+        }
+        order = build_arena_fighter_display_order(config.ship_design);
+        break;
+    }
+    case NetType::NTM: {
+        // NTM: minimal generic labels (threat features -> threat score).
+        // NTM nets are small (7 inputs -> 1 output); use generic indexed labels.
+        std::size_t input_count = config.network.input_size();
+        labels.reserve(input_count);
+        for (std::size_t i = 0; i < input_count; ++i) {
+            char buf[16];
+            std::snprintf(buf, sizeof(buf), "TF%zu", i);
+            labels.push_back(buf);
+        }
+        input_colors.reserve(input_count);
+        for (std::size_t i = 0; i < input_count; ++i) {
+            input_colors.push_back({255, 100, 100});  // red (threat color)
+        }
+        order.resize(input_count);
+        for (std::size_t i = 0; i < input_count; ++i) {
+            order[i] = i;
+        }
+        break;
+    }
+    case NetType::Solo: {
+        // Solo: sensor-based labels from ShipDesign.
         labels = build_input_labels(config.ship_design);
         auto nf_colors = build_input_colors(config.ship_design);
         input_colors.reserve(nf_colors.size());
@@ -41,6 +76,8 @@ neuralnet_ui::NetRenderConfig build_variant_net_config(
             input_colors.push_back({c.r, c.g, c.b});
         }
         order = build_display_order(config.ship_design);
+        break;
+    }
     }
 
     // 2. Build output labels based on net type.
@@ -55,6 +92,14 @@ neuralnet_ui::NetRenderConfig build_variant_net_config(
         }
         // Any extra outputs beyond the expected 5 get generic labels.
         for (std::size_t i = squad_outputs.size(); i < output_size; ++i) {
+            char buf[8];
+            std::snprintf(buf, sizeof(buf), "O%zu", i);
+            output_labels.push_back(buf);
+        }
+    } else if (config.net_type == NetType::NTM) {
+        // NTM: single threat score output.
+        if (output_size >= 1) output_labels.push_back("Threat");
+        for (std::size_t i = 1; i < output_size; ++i) {
             char buf[8];
             std::snprintf(buf, sizeof(buf), "O%zu", i);
             output_labels.push_back(buf);
@@ -79,6 +124,11 @@ neuralnet_ui::NetRenderConfig build_variant_net_config(
         // All squad leader outputs are tactical orders — use yellow.
         for (std::size_t i = 0; i < output_size; ++i) {
             output_colors.push_back({249, 202, 36});  // yellow (squad color)
+        }
+    } else if (config.net_type == NetType::NTM) {
+        // NTM outputs are threat scores — use red.
+        for (std::size_t i = 0; i < output_size; ++i) {
+            output_colors.push_back({255, 100, 100});  // red (threat color)
         }
     } else {
         for (std::size_t i = 0; i < output_size; ++i) {
@@ -108,11 +158,6 @@ neuralnet_ui::NetRenderConfig build_variant_net_config(
     result.mouse_y = config.mouse_y;
 
     return result;
-}
-
-neuralnet_ui::NetRenderResult render_variant_net(const VariantNetConfig& config) {
-    auto render_config = build_variant_net_config(config);
-    return neuralnet_ui::render_neural_net(render_config);
 }
 
 } // namespace neuroflyer

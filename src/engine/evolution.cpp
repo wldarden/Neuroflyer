@@ -1,12 +1,31 @@
 #include <neuroflyer/evolution.h>
 
 #include <algorithm>
+#include <cassert>
 #include <chrono>
 #include <cmath>
 #include <cstring>
 #include <map>
 
 namespace neuroflyer {
+
+void sync_activations_from_genome(
+    const evolve::StructuredGenome& genome,
+    neuralnet::NetworkTopology& topology) {
+    for (std::size_t l = 0; l < topology.layers.size(); ++l) {
+        std::string lp = "layer_" + std::to_string(l);
+        if (genome.has_gene(lp + "_activations")) {
+            const auto& ag = genome.gene(lp + "_activations");
+            topology.layers[l].node_activations.resize(ag.values.size());
+            for (std::size_t n = 0; n < ag.values.size(); ++n) {
+                int idx = std::clamp(static_cast<int>(std::round(ag.values[n])),
+                                     0, neuralnet::ACTIVATION_COUNT - 1);
+                topology.layers[l].node_activations[n] =
+                    static_cast<neuralnet::Activation>(idx);
+            }
+        }
+    }
+}
 
 uint32_t individual_hash(const Individual& ind) {
     uint32_t h = 0;
@@ -178,21 +197,8 @@ Individual Individual::random(std::size_t input_size,
 }
 
 neuralnet::Network Individual::build_network() const {
-    // Populate per-node activations from genes into a mutable topology copy
     auto topo = topology;
-    for (std::size_t l = 0; l < topo.layers.size(); ++l) {
-        std::string lp = "layer_" + std::to_string(l);
-        if (genome.has_gene(lp + "_activations")) {
-            const auto& ag = genome.gene(lp + "_activations");
-            topo.layers[l].node_activations.resize(ag.values.size());
-            for (std::size_t n = 0; n < ag.values.size(); ++n) {
-                int idx = std::clamp(static_cast<int>(std::round(ag.values[n])),
-                                     0, neuralnet::ACTIVATION_COUNT - 1);
-                topo.layers[l].node_activations[n] =
-                    static_cast<neuralnet::Activation>(idx);
-            }
-        }
-    }
+    sync_activations_from_genome(genome, topo);
 
     // Extract weights in layer order: weights then biases per layer
     std::vector<float> flat;
@@ -282,7 +288,10 @@ Individual convert_variant_to_fighter(
                 // Copy is_tower weight
                 new_weights[out * arena_input + dst_col + 1] =
                     old_weights[out * old_input + src_col + 1];
-                // arena[2]=is_token, arena[3]=is_friend, arena[4]=is_bullet -> zero (already 0)
+                // Map scroller is_token to arena is_token
+                new_weights[out * arena_input + dst_col + 2] =
+                    old_weights[out * old_input + src_col + 3];
+                // arena[3]=is_friend, arena[4]=is_bullet -> zero (already 0)
                 src_col += 4;  // scroller: distance, is_tower, token_value, is_token
                 dst_col += 5;  // arena: distance, is_tower, is_token, is_friend, is_bullet
             } else {
@@ -296,6 +305,7 @@ Individual convert_variant_to_fighter(
 
         // Skip scroller position inputs (3 columns)
         src_col += 3;
+        assert(src_col + design.memory_slots == old_input && "Variant topology mismatch in convert_variant_to_fighter");
 
         // Squad leader inputs (6 columns) — leave as zero
         dst_col += 6;
@@ -677,21 +687,7 @@ Snapshot create_random_snapshot(
     snap.parent_name = "";
     snap.ship_design = design;
     snap.topology = ind.topology;
-
-    // Populate per-node activations from activation genes
-    for (std::size_t l = 0; l < snap.topology.layers.size(); ++l) {
-        std::string lp = "layer_" + std::to_string(l);
-        if (ind.genome.has_gene(lp + "_activations")) {
-            const auto& ag = ind.genome.gene(lp + "_activations");
-            snap.topology.layers[l].node_activations.resize(ag.values.size());
-            for (std::size_t n = 0; n < ag.values.size(); ++n) {
-                int idx = std::clamp(static_cast<int>(std::round(ag.values[n])),
-                                     0, neuralnet::ACTIVATION_COUNT - 1);
-                snap.topology.layers[l].node_activations[n] =
-                    static_cast<neuralnet::Activation>(idx);
-            }
-        }
-    }
+    sync_activations_from_genome(ind.genome, snap.topology);
 
     // Extract flat weights + biases + activations (in genome insertion order)
     snap.weights = ind.genome.flatten("layer_");
@@ -722,21 +718,7 @@ Snapshot best_as_snapshot(
     snap.parent_name = "";
     snap.ship_design = design;
     snap.topology = it->topology;
-
-    // Populate per-node activations from activation genes
-    for (std::size_t l = 0; l < snap.topology.layers.size(); ++l) {
-        std::string lp = "layer_" + std::to_string(l);
-        if (it->genome.has_gene(lp + "_activations")) {
-            const auto& ag = it->genome.gene(lp + "_activations");
-            snap.topology.layers[l].node_activations.resize(ag.values.size());
-            for (std::size_t n = 0; n < ag.values.size(); ++n) {
-                int idx = std::clamp(static_cast<int>(std::round(ag.values[n])),
-                                     0, neuralnet::ACTIVATION_COUNT - 1);
-                snap.topology.layers[l].node_activations[n] =
-                    static_cast<neuralnet::Activation>(idx);
-            }
-        }
-    }
+    sync_activations_from_genome(it->genome, snap.topology);
 
     // Extract flat weights + biases + activations (in genome insertion order)
     snap.weights = it->genome.flatten("layer_");

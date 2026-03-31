@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <span>
+#include <string>
 #include <vector>
 
 namespace neuroflyer {
@@ -67,5 +68,14 @@ struct DirRange {
     float squad_center_heading, float squad_center_distance,
     float aggression, float spacing,
     std::span<const float> memory);
+
+/// Build input labels for arena fighter nets.
+[[nodiscard]] std::vector<std::string> build_arena_fighter_input_labels(const ShipDesign& design);
+
+/// Build input colors for arena fighter nets.
+[[nodiscard]] std::vector<NodeStyle> build_arena_fighter_input_colors(const ShipDesign& design);
+
+/// Build display order for arena fighter nets.
+[[nodiscard]] std::vector<std::size_t> build_arena_fighter_display_order(const ShipDesign& design);
 
 } // namespace neuroflyer

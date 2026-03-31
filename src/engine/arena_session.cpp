@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <set>
 
 namespace neuroflyer {
@@ -42,7 +43,7 @@ void ArenaSession::spawn_ships() {
     float outer = radius * 2.0f / 3.0f;
 
     std::size_t num_teams = config_.num_teams;
-    float slice_angle = 2.0f * static_cast<float>(M_PI) / static_cast<float>(num_teams);
+    float slice_angle = 2.0f * std::numbers::pi_v<float> / static_cast<float>(num_teams);
 
     for (std::size_t i = 0; i < config_.population_size(); ++i) {
         int team = team_assignments_[i];
@@ -75,7 +76,7 @@ void ArenaSession::spawn_bases() {
     float center_y = config_.world_height / 2.0f;
     float radius = std::min(config_.world_width, config_.world_height) / 2.0f;
     float base_ring = radius * 0.5f;  // bases at 50% of arena radius
-    float slice_angle = 2.0f * static_cast<float>(M_PI) / static_cast<float>(config_.num_teams);
+    float slice_angle = 2.0f * std::numbers::pi_v<float> / static_cast<float>(config_.num_teams);
 
     for (std::size_t t = 0; t < config_.num_teams; ++t) {
         float angle = static_cast<float>(t) * slice_angle + slice_angle / 2.0f;
@@ -237,10 +238,8 @@ void ArenaSession::resolve_bullet_ship_collisions() {
             if (!ships_[i].alive) continue;
             // Skip self-hits
             if (b.owner_index == static_cast<int>(i)) continue;
-            // Check vertex-based collision plus center proximity.
-            // bullet_triangle_collision uses fixed (non-rotated) vertex offsets,
-            // so we also check distance to the ship center for robustness.
-            bool hit = bullet_triangle_collision(b.x, b.y, ships_[i]);
+            // Check rotation-aware vertex-based collision plus center proximity.
+            bool hit = bullet_triangle_collision_rotated(b.x, b.y, ships_[i]);
             if (!hit) {
                 float dx = b.x - ships_[i].x;
                 float dy = b.y - ships_[i].y;
@@ -251,10 +250,12 @@ void ArenaSession::resolve_bullet_ship_collisions() {
                 b.alive = false;
                 // Track kill: compare killer's team to victim's team
                 auto killer = static_cast<std::size_t>(b.owner_index);
-                if (team_assignments_[killer] == team_assignments_[i]) {
-                    ally_kills_[killer]++;
-                } else {
-                    enemy_kills_[killer]++;
+                if (killer < team_assignments_.size()) {
+                    if (team_assignments_[killer] == team_assignments_[i]) {
+                        ally_kills_[killer]++;
+                    } else {
+                        enemy_kills_[killer]++;
+                    }
                 }
                 break;
             }
@@ -300,7 +301,7 @@ void ArenaSession::resolve_ship_tower_collisions() {
         if (!ship.alive) continue;
         for (const auto& tower : towers_) {
             if (!tower.alive) continue;
-            if (triangle_circle_collision(ship, tower.x, tower.y, tower.radius)) {
+            if (triangle_circle_collision_rotated(ship, tower.x, tower.y, tower.radius)) {
                 ship.alive = false;
                 break;
             }
@@ -373,8 +374,7 @@ SquadStats ArenaSession::compute_squad_stats(int team, int squad) const {
             float dx_home = stats.centroid_x - bases_[t].x;
             float dy_home = stats.centroid_y - bases_[t].y;
             float dist_home = std::sqrt(dx_home * dx_home + dy_home * dy_home);
-            float diag = std::sqrt(config_.world_width * config_.world_width +
-                                    config_.world_height * config_.world_height);
+            float diag = config_.world_diagonal();
             stats.avg_dist_to_home = dist_home / diag;
             if (dist_home > 0.0f) {
                 stats.centroid_dir_sin = dx_home / dist_home;
@@ -395,8 +395,7 @@ SquadStats ArenaSession::compute_squad_stats(int team, int squad) const {
 
     // Compute squad spacing: stddev of alive ship distances from centroid, normalized
     if (alive_count > 0.0f) {
-        float diag = std::sqrt(config_.world_width * config_.world_width +
-                                config_.world_height * config_.world_height);
+        float diag = config_.world_diagonal();
         float sum_dist = 0.0f;
         float sum_dist_sq = 0.0f;
         for (std::size_t i = 0; i < ships_.size(); ++i) {

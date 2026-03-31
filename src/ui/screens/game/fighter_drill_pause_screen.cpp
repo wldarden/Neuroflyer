@@ -1,16 +1,22 @@
 #include <neuroflyer/ui/screens/fighter_drill_pause_screen.h>
 #include <neuroflyer/ui/ui_manager.h>
 #include <neuroflyer/ui/ui_widget.h>
+#include <neuroflyer/ui/modals/input_modal.h>
 
 #include <neuroflyer/app_state.h>
+#include <neuroflyer/evolution.h>
 #include <neuroflyer/renderer.h>
+#include <neuroflyer/genome_manager.h>
 #include <neuroflyer/snapshot.h>
 #include <neuroflyer/snapshot_io.h>
 
 #include <imgui.h>
 
+#include <neuralnet/network.h>
+
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <iostream>
 
@@ -32,7 +38,7 @@ FighterDrillPauseScreen::FighterDrillPauseScreen(
     , evo_config_(std::move(evo_config))
     , on_resume_(std::move(on_resume)) {}
 
-void FighterDrillPauseScreen::on_draw(AppState& /*state*/, Renderer& renderer,
+void FighterDrillPauseScreen::on_draw(AppState& state, Renderer& renderer,
                                        UIManager& ui) {
     // Build sorted indices on first draw
     if (!indices_built_) {
@@ -240,41 +246,54 @@ void FighterDrillPauseScreen::on_draw(AppState& /*state*/, Renderer& renderer,
         std::snprintf(btn_label, sizeof(btn_label),
             "Save %d Selected", sel_count);
         if (ImGui::Button(btn_label, ImVec2(180, 30))) {
-            int saved = 0;
-            for (std::size_t rank = 0; rank < sorted_indices_.size(); ++rank) {
-                if (rank >= selected_.size() || !selected_[rank]) continue;
-                std::size_t pop_idx = sorted_indices_[rank];
-                if (pop_idx >= population_.size()) continue;
+            ui.push_modal(std::make_unique<InputModal>(
+                "Save Fighter Variants",
+                "Enter base name:",
+                [this, &state](const std::string& base_name) {
+                    int saved = 0;
+                    int idx = 1;
 
-                const auto& ind = population_[pop_idx];
+                    for (std::size_t rank = 0; rank < sorted_indices_.size(); ++rank) {
+                        if (rank >= selected_.size() || !selected_[rank]) continue;
+                        std::size_t pop_idx = sorted_indices_[rank];
+                        if (pop_idx >= population_.size()) continue;
 
-                Snapshot snap;
-                snap.name = variant_name_ + "-drill-g"
-                    + std::to_string(generation_) + "-"
-                    + std::to_string(saved + 1);
-                snap.ship_design = ship_design_;
-                snap.topology = ind.topology;
-                snap.weights = ind.genome.flatten("layer_");
-                snap.generation = static_cast<uint32_t>(generation_);
-                snap.parent_name = variant_name_;
-                snap.net_type = NetType::Fighter;
-                snap.created_timestamp =
-                    std::chrono::duration_cast<std::chrono::seconds>(
-                        std::chrono::system_clock::now().time_since_epoch())
-                        .count();
+                        const auto& ind = population_[pop_idx];
 
-                std::string path = genome_dir_ + "/" + snap.name + ".bin";
-                try {
-                    save_snapshot(snap, path);
-                    ++saved;
-                } catch (const std::exception& e) {
-                    std::cerr << "Failed to save variant: "
-                              << e.what() << "\n";
-                }
-            }
+                        Snapshot snap;
+                        char snap_name[128];
+                        std::snprintf(snap_name, sizeof(snap_name),
+                            "%s-%d", base_name.c_str(), idx);
+                        snap.name = snap_name;
+                        snap.ship_design = ship_design_;
+                        snap.topology = ind.topology;
+                        snap.weights = ind.genome.flatten("layer_");
+                        snap.generation = static_cast<uint32_t>(generation_);
+                        snap.parent_name = variant_name_;
+                        snap.net_type = NetType::Fighter;
 
-            std::cout << "Saved " << saved
-                      << " fighter drill variants to " << genome_dir_ << "\n";
+                        sync_activations_from_genome(ind.genome, snap.topology);
+                        snap.created_timestamp =
+                            std::chrono::duration_cast<std::chrono::seconds>(
+                                std::chrono::system_clock::now().time_since_epoch())
+                                .count();
+
+                        try {
+                            save_squad_variant(genome_dir_, snap);
+                            ++saved;
+                        } catch (const std::exception& e) {
+                            std::cerr << "Failed to save variant: "
+                                      << e.what() << "\n";
+                        }
+                        ++idx;
+                    }
+
+                    std::cout << "Saved " << saved
+                              << " fighter drill variants to "
+                              << genome_dir_ << "/squad/\n";
+                    state.variants_dirty = true;
+                },
+                "drill-g" + std::to_string(generation_)));
         }
 
         if (!can_save) ImGui::EndDisabled();

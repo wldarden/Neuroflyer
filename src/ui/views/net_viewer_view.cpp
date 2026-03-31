@@ -64,8 +64,11 @@ void draw_net_viewer_view(NetViewerViewState& state, SDL_Renderer* sdl_renderer)
         }
     }
 
+    // Extra left padding so input labels aren't clipped at the canvas edge
+    const int left_pad = static_cast<int>(120.0f * state.zoom);
+
     // Canvas dimensions scale with zoom
-    int canvas_w = static_cast<int>(view_w * state.zoom);
+    int canvas_w = static_cast<int>(view_w * state.zoom) + left_pad;
     int canvas_h = static_cast<int>(std::max(view_h, base_content_height) * state.zoom);
 
     // Clamp scroll to the scrollable region on both axes
@@ -87,7 +90,7 @@ void draw_net_viewer_view(NetViewerViewState& state, SDL_Renderer* sdl_renderer)
     auto net_ptr = std::make_shared<neuralnet::Network>(*state.network);
     auto cfg = build_variant_net_config({
         state.ship_design, *net_ptr, sdl_renderer,
-        0, 0, canvas_w, canvas_h,
+        left_pad, 0, canvas_w - left_pad, canvas_h,
         state.input_values, canvas_mx, canvas_my,
         state.net_type});
     cfg.text_scale = std::max(1, static_cast<int>(std::round(state.zoom)));

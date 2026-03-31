@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <iostream>
 
 namespace neuroflyer {
 
@@ -339,21 +340,7 @@ void PauseConfigScreen::draw_save_variants_tab(
                         snap.topology = ind.topology;
                         snap.weights = ind.genome.flatten("layer_");
 
-                        // Sync per-node activations from genome
-                        for (std::size_t l = 0; l < snap.topology.layers.size(); ++l) {
-                            std::string lp = "layer_" + std::to_string(l);
-                            if (ind.genome.has_gene(lp + "_activations")) {
-                                const auto& ag = ind.genome.gene(lp + "_activations");
-                                auto& na = snap.topology.layers[l].node_activations;
-                                na.resize(ag.values.size());
-                                for (std::size_t n = 0; n < ag.values.size(); ++n) {
-                                    int ai = std::clamp(
-                                        static_cast<int>(std::round(ag.values[n])),
-                                        0, neuralnet::ACTIVATION_COUNT - 1);
-                                    na[n] = static_cast<neuralnet::Activation>(ai);
-                                }
-                            }
-                        }
+                        sync_activations_from_genome(ind.genome, snap.topology);
 
                         if (pop_idx < fs.evo_config.elitism_count) {
                             elite_slots.push_back(pop_idx);
@@ -370,7 +357,9 @@ void PauseConfigScreen::draw_save_variants_tab(
                     for (auto& snap : other_snaps) {
                         try {
                             save_variant(fs.active_genome_dir, snap);
-                        } catch (...) {}
+                        } catch (const std::exception& e) {
+                            std::cerr << "Failed to save variant: " << e.what() << "\n";
+                        }
                     }
 
                     // Save elite variants with MRCA tree
@@ -381,7 +370,9 @@ void PauseConfigScreen::draw_save_variants_tab(
                                 state.training_parent_name,
                                 fs.mrca_tracker,
                                 elite_slots, elite_ids, elite_snaps);
-                        } catch (...) {}
+                        } catch (const std::exception& e) {
+                            std::cerr << "Failed to save elite variants: " << e.what() << "\n";
+                        }
                     }
 
                     state.variants_dirty = true;

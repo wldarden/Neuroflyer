@@ -12,6 +12,10 @@ namespace neuroflyer {
 inline constexpr int LEGACY_NUM_RAYS = 13;
 inline constexpr float LEGACY_RAY_RANGE = 300.0f;
 
+/// Shared entity constants used by sensor queries (sensor_engine.cpp, arena_sensor.cpp).
+inline constexpr float SHIP_SENSOR_GAP = 15.0f;  // Distance from ship center to sensor origin
+inline constexpr float BULLET_RADIUS   = 2.0f;   // Collision radius for bullets in arena sensors
+
 /// Derived geometric shape of a sensor — THE single derivation function.
 /// Used by: query_occulus (detection), renderer (drawing), visualization (endpoints).
 struct SensorShape {

@@ -676,7 +676,9 @@ VariantViewerScreen::Action VariantViewerScreen::draw_variant_list(
                 try {
                     auto gsnap = load_snapshot(gpath);
                     evo_flags_ = gsnap.ship_design.evolvable;
-                } catch (...) {}
+                } catch (const std::exception& e) {
+                    std::cerr << "Failed to load genome evo flags: " << e.what() << "\n";
+                }
                 evo_loaded_ = true;
             }
 

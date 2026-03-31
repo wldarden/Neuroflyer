@@ -3,6 +3,7 @@
 #include <neuroflyer/ui/modals/input_modal.h>
 
 #include <neuroflyer/app_state.h>
+#include <neuroflyer/evolution.h>
 #include <neuroflyer/genome_manager.h>
 #include <neuroflyer/renderer.h>
 #include <neuroflyer/snapshot.h>
@@ -32,7 +33,7 @@ ArenaPauseScreen::ArenaPauseScreen(
     , ntm_config_(std::move(ntm_config))
     , on_resume_(std::move(on_resume)) {}
 
-void ArenaPauseScreen::on_draw(AppState& /*state*/, Renderer& renderer,
+void ArenaPauseScreen::on_draw(AppState& state, Renderer& renderer,
                                 UIManager& ui) {
     // Build sorted indices on first draw
     if (!indices_built_) {
@@ -180,7 +181,7 @@ void ArenaPauseScreen::on_draw(AppState& /*state*/, Renderer& renderer,
         ui.push_modal(std::make_unique<InputModal>(
             "Save Squad Variants",
             "Enter base name:",
-            [this](const std::string& base_name) {
+            [this, &state](const std::string& base_name) {
                 int saved = 0;
                 int idx = 1;
 
@@ -208,25 +209,13 @@ void ArenaPauseScreen::on_draw(AppState& /*state*/, Renderer& renderer,
                         snap.net_type = NetType::SquadLeader;
                         snap.paired_fighter_name = paired_fighter_name_;
 
-                        // Sync per-node activations
-                        for (std::size_t l = 0; l < snap.topology.layers.size(); ++l) {
-                            std::string lp = "layer_" + std::to_string(l);
-                            if (team.squad_individual.genome.has_gene(lp + "_activations")) {
-                                const auto& ag = team.squad_individual.genome.gene(lp + "_activations");
-                                auto& na = snap.topology.layers[l].node_activations;
-                                na.resize(ag.values.size());
-                                for (std::size_t n = 0; n < ag.values.size(); ++n) {
-                                    int ai = std::clamp(
-                                        static_cast<int>(std::round(ag.values[n])),
-                                        0, neuralnet::ACTIVATION_COUNT - 1);
-                                    na[n] = static_cast<neuralnet::Activation>(ai);
-                                }
-                            }
-                        }
+                        sync_activations_from_genome(team.squad_individual.genome, snap.topology);
 
                         try {
                             save_squad_variant(genome_dir_, snap);
-                        } catch (...) {}
+                        } catch (const std::exception& e) {
+                            std::cerr << "Failed to save squad variant: " << e.what() << "\n";
+                        }
                     }
 
                     // NTM companion snapshot
@@ -241,27 +230,14 @@ void ArenaPauseScreen::on_draw(AppState& /*state*/, Renderer& renderer,
                         ntm_snap.ship_design = ship_design_;
                         ntm_snap.topology = team.ntm_individual.topology;
                         ntm_snap.weights = team.ntm_individual.genome.flatten("layer_");
-                        ntm_snap.net_type = NetType::Solo;
-
-                        // Sync per-node activations
-                        for (std::size_t l = 0; l < ntm_snap.topology.layers.size(); ++l) {
-                            std::string lp = "layer_" + std::to_string(l);
-                            if (team.ntm_individual.genome.has_gene(lp + "_activations")) {
-                                const auto& ag = team.ntm_individual.genome.gene(lp + "_activations");
-                                auto& na = ntm_snap.topology.layers[l].node_activations;
-                                na.resize(ag.values.size());
-                                for (std::size_t n = 0; n < ag.values.size(); ++n) {
-                                    int ai = std::clamp(
-                                        static_cast<int>(std::round(ag.values[n])),
-                                        0, neuralnet::ACTIVATION_COUNT - 1);
-                                    na[n] = static_cast<neuralnet::Activation>(ai);
-                                }
-                            }
-                        }
+                        ntm_snap.net_type = NetType::NTM;
+                        sync_activations_from_genome(team.ntm_individual.genome, ntm_snap.topology);
 
                         try {
                             save_squad_variant(genome_dir_, ntm_snap);
-                        } catch (...) {}
+                        } catch (const std::exception& e) {
+                            std::cerr << "Failed to save NTM variant: " << e.what() << "\n";
+                        }
                     }
 
                     ++saved;
@@ -270,6 +246,7 @@ void ArenaPauseScreen::on_draw(AppState& /*state*/, Renderer& renderer,
 
                 std::cout << "Saved " << saved
                           << " squad variants to " << genome_dir_ << "/squad/\n";
+                state.variants_dirty = true;
             },
             "gen" + std::to_string(generation_)));
     }

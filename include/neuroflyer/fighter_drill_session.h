@@ -42,6 +42,7 @@ struct FighterDrillConfig {
     float attack_travel_weight = 1.0f;
     float attack_hit_bonus = 500.0f;
     float token_bonus = 50.0f;
+    float death_penalty = 200.0f;
 
     [[nodiscard]] float world_diagonal() const noexcept {
         return std::sqrt(world_width * world_width + world_height * world_height);

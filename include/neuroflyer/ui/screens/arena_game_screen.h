@@ -1,7 +1,6 @@
 #pragma once
 
 #include <neuroflyer/arena_config.h>
-#include <neuroflyer/arena_match.h>
 #include <neuroflyer/arena_sensor.h>
 #include <neuroflyer/arena_session.h>
 #include <neuroflyer/camera.h>

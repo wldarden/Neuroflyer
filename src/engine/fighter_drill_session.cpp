@@ -177,6 +177,11 @@ void FighterDrillSession::update_bullets() {
     for (auto& b : bullets_) {
         if (!b.alive) continue;
         b.update_directional();
+        // Destroy bullets that leave the world boundary
+        if (b.x < 0 || b.x > config_.world_width ||
+            b.y < 0 || b.y > config_.world_height) {
+            b.alive = false;
+        }
     }
 }
 
@@ -187,6 +192,7 @@ void FighterDrillSession::resolve_ship_tower_collisions() {
             if (!tower.alive) continue;
             if (triangle_circle_collision_rotated(ships_[i], tower.x, tower.y, tower.radius)) {
                 ships_[i].alive = false;
+                scores_[i] -= config_.death_penalty;
                 break;
             }
         }

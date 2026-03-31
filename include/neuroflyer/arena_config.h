@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -16,7 +17,7 @@ struct ArenaConfig {
 
     // Round timing
     uint32_t time_limit_ticks = 60 * 60;  // 60 seconds at 60fps
-    std::size_t rounds_per_generation = 1;
+    std::size_t rounds_per_generation = 10;  // multiple rounds for matchmaking coverage
 
     // Obstacles
     std::size_t tower_count = 200;
@@ -45,15 +46,8 @@ struct ArenaConfig {
     float sector_size = 2000.0f;
     int ntm_sector_radius = 2;  // Manhattan distance for "near"
 
-    // Near Threat Matrix (NTM) sub-net topology
-    std::size_t ntm_input_size = 7;
-    std::vector<std::size_t> ntm_hidden_sizes = {4};
-    std::size_t ntm_output_size = 1;  // just threat_score
-
-    // Squad leader net topology
-    std::size_t squad_leader_input_size = 14;
-    std::vector<std::size_t> squad_leader_hidden_sizes = {8};
-    std::size_t squad_leader_output_size = 5;  // 2 spacing + 3 tactical
+    // NTM and squad leader net topologies are configured via NtmNetConfig and
+    // SquadLeaderNetConfig in team_evolution.h (the authoritative source).
 
     // Squad leader fighter inputs (replaces broadcast signals)
     static constexpr std::size_t squad_leader_fighter_inputs = 6;
@@ -67,6 +61,10 @@ struct ArenaConfig {
     // Derived
     [[nodiscard]] std::size_t population_size() const noexcept {
         return num_teams * num_squads * fighters_per_squad;
+    }
+
+    [[nodiscard]] float world_diagonal() const noexcept {
+        return std::sqrt(world_width * world_width + world_height * world_height);
     }
 };
 

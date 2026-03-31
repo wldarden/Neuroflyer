@@ -4,15 +4,15 @@
 #include <neuroflyer/ui/modals/input_modal.h>
 #include <neuroflyer/ui/modals/layer_editor_modal.h>
 #include <neuroflyer/ui/modals/node_editor_modal.h>
+#include <neuroflyer/evolution.h>
 #include <neuroflyer/snapshot_io.h>
-
-#include <neuralnet/activation.h>
 
 #include <imgui.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <iostream>
 
 #include <string>
 #include <utility>
@@ -158,21 +158,7 @@ void VariantNetEditorScreen::on_draw(
                         auto snap = load_snapshot(variant_path_);
                         snap.weights = individual_.genome.flatten("layer_");
                         snap.topology = individual_.topology;
-                        // Sync topology activations from genome
-                        for (std::size_t l = 0; l < snap.topology.layers.size(); ++l) {
-                            std::string lp = "layer_" + std::to_string(l);
-                            if (individual_.genome.has_gene(lp + "_activations")) {
-                                const auto& ag = individual_.genome.gene(lp + "_activations");
-                                snap.topology.layers[l].node_activations.resize(ag.values.size());
-                                for (std::size_t n = 0; n < ag.values.size(); ++n) {
-                                    int idx = std::clamp(
-                                        static_cast<int>(std::round(ag.values[n])),
-                                        0, neuralnet::ACTIVATION_COUNT - 1);
-                                    snap.topology.layers[l].node_activations[n] =
-                                        static_cast<neuralnet::Activation>(idx);
-                                }
-                            }
-                        }
+                        sync_activations_from_genome(individual_.genome, snap.topology);
                         if (name == snap.name) {
                             save_snapshot(snap, variant_path_);
                         } else {
@@ -184,7 +170,9 @@ void VariantNetEditorScreen::on_draw(
                         }
                         state.variants_dirty = true;
                         state.lineage_dirty = true;
-                    } catch (...) {}
+                    } catch (const std::exception& e) {
+                        std::cerr << "Failed to save snapshot: " << e.what() << "\n";
+                    }
                 },
                 variant_name_));
         }

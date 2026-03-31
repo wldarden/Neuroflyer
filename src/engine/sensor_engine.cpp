@@ -21,9 +21,8 @@ SensorShape compute_sensor_shape(const SensorDef& sensor, float ship_x, float sh
     //   major_radius = range * 0.5
     //   center_distance = SHIP_GAP + major_radius
     //   minor_radius = width * center_distance  (width is the tangent-like ratio)
-    constexpr float SHIP_GAP = 15.0f;
     float major_r = sensor.range * 0.5f;
-    float center_dist = SHIP_GAP + major_r;
+    float center_dist = SHIP_SENSOR_GAP + major_r;
 
     float sin_a = std::sin(sensor.angle);
     float cos_a = std::cos(sensor.angle);
@@ -107,9 +106,8 @@ SensorReading query_occulus(const SensorDef& sensor,
             float center_dist = std::sqrt(obj_dx * obj_dx + obj_dy * obj_dy);
             float edge_dist = std::max(0.0f, center_dist - obj_r);
             // max_reach = farthest point of ellipse from ship
-            // center is at (SHIP_GAP + major_r) from ship, extends major_r further
-            constexpr float SHIP_GAP_INNER = 15.0f;
-            float max_reach = SHIP_GAP_INNER + major_radius * 2.0f;
+            // center is at (SHIP_SENSOR_GAP + major_r) from ship, extends major_r further
+            float max_reach = SHIP_SENSOR_GAP + major_radius * 2.0f;
             return std::min(edge_dist / max_reach, 1.0f);
         }
         return -1.0f;

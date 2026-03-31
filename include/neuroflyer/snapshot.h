@@ -12,7 +12,8 @@ namespace neuroflyer {
 enum class NetType : uint8_t {
     Solo = 0,        // Original scroller game variant (sensors + position + memory)
     Fighter = 1,     // Arena fighter (sensors + squad leader inputs + memory)
-    SquadLeader = 2  // Squad leader net (strategic inputs -> tactical orders)
+    SquadLeader = 2, // Squad leader net (strategic inputs -> tactical orders)
+    NTM = 3          // Near Threat Matrix sub-net (threat features -> threat score)
 };
 
 struct Snapshot {

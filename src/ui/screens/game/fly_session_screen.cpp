@@ -24,11 +24,6 @@
 namespace neuroflyer {
 namespace {
 
-NetViewerViewState& get_fly_net_viewer_state() {
-    static NetViewerViewState s_fly_net;
-    return s_fly_net;
-}
-
 /// Record elite lineage for MRCA tracking.
 void record_mrca(FlySessionState& s) {
     std::vector<uint32_t> elite_ids;
@@ -254,7 +249,8 @@ void tick_individual(FlySessionState& s, std::size_t i, const GameConfig& config
 }
 
 /// Render the game + net panel for the focused individual.
-void render_fly(FlySessionState& s, const AppState& state, Renderer& renderer) {
+void render_fly(FlySessionState& s, const AppState& state, Renderer& renderer,
+                NetViewerViewState& fly_net_state) {
     // Find focused individual
     std::size_t best_living_idx = 0;
     float best_living_score = -1e9f;
@@ -332,7 +328,7 @@ void render_fly(FlySessionState& s, const AppState& state, Renderer& renderer) {
                     focused_rays, render_state, s.ship_design);
 
     // Render net panel (right side) via NetViewerView with editor_mode = false
-    NetViewerViewState& fly_net_state = get_fly_net_viewer_state();
+    // fly_net_state passed as parameter from FlySessionScreen member
     fly_net_state.individual = &s.population[focused_idx];
     fly_net_state.network = &s.networks[focused_idx];
     fly_net_state.ship_design = s.ship_design;
@@ -574,7 +570,7 @@ void FlySessionScreen::on_draw(AppState& state, Renderer& renderer,
             }
         }
 
-        render_fly(s, state, renderer);
+        render_fly(s, state, renderer, fly_net_state_);
         break;
     }
 
@@ -594,7 +590,7 @@ void FlySessionScreen::on_draw(AppState& state, Renderer& renderer,
         s.phase = FlySessionState::Phase::Running;
 
         // Render one frame so we don't have a blank
-        render_fly(s, state, renderer);
+        render_fly(s, state, renderer, fly_net_state_);
         break;
     }
 
@@ -715,7 +711,7 @@ FlySessionState& get_fly_session_state() {
 }
 
 void FlySessionScreen::post_render(SDL_Renderer* sdl_renderer) {
-    flush_net_viewer_view(get_fly_net_viewer_state(), sdl_renderer);
+    flush_net_viewer_view(fly_net_state_, sdl_renderer);
 }
 
 } // namespace neuroflyer

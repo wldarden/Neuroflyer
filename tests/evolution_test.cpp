@@ -78,7 +78,7 @@ TEST(EvolutionTest, PopulationEvolves) {
 
 // --- convert_variant_to_fighter tests ---
 
-TEST(Evolution, ConvertVariantToFighterTopology) {
+TEST(EvolutionTest, ConvertVariantToFighterTopology) {
     std::mt19937 rng(42);
     nf::ShipDesign design;
     nf::SensorDef full_sensor;
@@ -112,7 +112,7 @@ TEST(Evolution, ConvertVariantToFighterTopology) {
     EXPECT_EQ(fighter.topology.layers[2].output_size, 7u);
 }
 
-TEST(Evolution, ConvertVariantToFighterSensorWeightsPreserved) {
+TEST(EvolutionTest, ConvertVariantToFighterSensorWeightsPreserved) {
     std::mt19937 rng(42);
     nf::ShipDesign design;
     nf::SensorDef full_sensor;
@@ -144,7 +144,7 @@ TEST(Evolution, ConvertVariantToFighterSensorWeightsPreserved) {
     }
 }
 
-TEST(Evolution, ConvertVariantToFighterNewInputsZero) {
+TEST(EvolutionTest, ConvertVariantToFighterNewInputsZero) {
     std::mt19937 rng(42);
     nf::ShipDesign design;
     nf::SensorDef full_sensor;
@@ -163,9 +163,10 @@ TEST(Evolution, ConvertVariantToFighterNewInputsZero) {
     std::size_t hidden_size = 4;
     // Arena layout: [dist, tower, is_token, is_friend, is_bullet] [6 squad leader] [2 mem]
     // Indices 2,3,4 = new arena sensor values, 5-10 = squad leader
+    auto old_weights = variant.genome.gene("layer_0_weights").values;
     for (std::size_t out = 0; out < hidden_size; ++out) {
-        // is_token (arena col 2) -- zero
-        EXPECT_FLOAT_EQ(new_weights[out * 13 + 2], 0.0f);
+        // is_token (arena col 2) -- mapped from scroller col 3
+        EXPECT_FLOAT_EQ(new_weights[out * 13 + 2], old_weights[out * 9 + 3]);
         // is_friend (arena col 3) -- zero
         EXPECT_FLOAT_EQ(new_weights[out * 13 + 3], 0.0f);
         // is_bullet (arena col 4) -- zero
@@ -177,7 +178,7 @@ TEST(Evolution, ConvertVariantToFighterNewInputsZero) {
     }
 }
 
-TEST(Evolution, ConvertVariantToFighterMemoryWeightsPreserved) {
+TEST(EvolutionTest, ConvertVariantToFighterMemoryWeightsPreserved) {
     std::mt19937 rng(42);
     nf::ShipDesign design;
     nf::SensorDef full_sensor;
@@ -203,7 +204,7 @@ TEST(Evolution, ConvertVariantToFighterMemoryWeightsPreserved) {
     }
 }
 
-TEST(Evolution, ConvertVariantToFighterHigherLayersUnchanged) {
+TEST(EvolutionTest, ConvertVariantToFighterHigherLayersUnchanged) {
     std::mt19937 rng(42);
     nf::ShipDesign design;
     nf::SensorDef s;
@@ -227,7 +228,7 @@ TEST(Evolution, ConvertVariantToFighterHigherLayersUnchanged) {
     }
 }
 
-TEST(Evolution, ConvertVariantToFighterNetworkWorks) {
+TEST(EvolutionTest, ConvertVariantToFighterNetworkWorks) {
     std::mt19937 rng(42);
     nf::ShipDesign design;
     nf::SensorDef s;

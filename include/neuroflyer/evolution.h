@@ -125,4 +125,10 @@ void apply_mutations(Individual& ind, const EvolutionConfig& config, std::mt1993
     const EvolutionConfig& config,
     std::mt19937& rng);
 
+/// Populate per-node activations in topology from genome activation genes.
+/// Shared by build_network(), snapshot creation, and variant save paths.
+void sync_activations_from_genome(
+    const evolve::StructuredGenome& genome,
+    neuralnet::NetworkTopology& topology);
+
 } // namespace neuroflyer

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <neuroflyer/ui/ui_screen.h>
+#include <neuroflyer/ui/views/net_viewer_view.h>
 
 namespace neuroflyer {
 
@@ -14,6 +15,9 @@ public:
     void on_draw(AppState& state, Renderer& renderer, UIManager& ui) override;
     void post_render(SDL_Renderer* sdl_renderer) override;
     [[nodiscard]] const char* name() const override { return "Flying"; }
+
+private:
+    NetViewerViewState fly_net_state_;
 };
 
 } // namespace neuroflyer
