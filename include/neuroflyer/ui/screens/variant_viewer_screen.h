@@ -16,6 +16,9 @@ namespace neuroflyer {
 /// Net type tabs for the variant viewer.
 enum class NetTypeTab { Fighters, SquadNets, Commander };
 
+/// Filter applied to the Fighters tab variant list.
+enum class FilterMode { All, SoloOnly, SquadOnly };
+
 class VariantViewerScreen : public UIScreen {
 public:
     void on_enter() override;
@@ -29,11 +32,12 @@ private:
 
     // Net type tab
     NetTypeTab active_tab_ = NetTypeTab::Fighters;
+    FilterMode fighter_filter_ = FilterMode::All;
 
     // Variant list state (fighters)
     struct VariantScreenState {
         std::vector<SnapshotHeader> variants;
-        int selected_idx = 0;
+        int selected_idx = -1;
         std::string genome_name;
         std::string genome_dir;
         bool show_lineage = false;
