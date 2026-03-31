@@ -1,5 +1,7 @@
 # NeuroFlyer Backlog
 
+> See also: `docs/arena-mode-backlog.md` for arena-specific items (squad leader analysis, training modes, info panel improvements).
+
 ## 1. MRCA History on Pause Screen
 
 Add a button to the pause screen that shows a lineage tree of the last completed generation's elite tree. The lineage tree has the sim's parent variant as the root node, with every elite individual from the last completed generation as descendants.

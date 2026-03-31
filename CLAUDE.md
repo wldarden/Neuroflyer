@@ -1,6 +1,6 @@
 # NeuroFlyer
 
-A neural net playground — vertical-scrolling arcade game where 100 neural nets learn to dodge towers and collect tokens via neuroevolution, with real-time brain visualization and a genome management hangar.
+A neural net playground with two game modes: a vertical-scrolling arcade where 100 neural nets learn to dodge towers and collect tokens, and a top-down arena where teams of ships with hierarchical brains (NTM + squad leader + fighter) battle for territory. Features neuroevolution, real-time brain visualization, and a genome management hangar.
 
 ## Repository
 
@@ -36,11 +36,19 @@ neuroflyer/
 │   │   │   ├── lineage_tree_screen.h
 │   │   │   ├── fly_session_screen.h
 │   │   │   ├── pause_config_screen.h
-│   │   │   └── settings_screen.h
+│   │   │   ├── settings_screen.h
+│   │   │   ├── arena_config_screen.h
+│   │   │   ├── arena_game_screen.h
+│   │   │   ├── arena_pause_screen.h
+│   │   │   ├── fighter_drill_screen.h
+│   │   │   └── fighter_drill_pause_screen.h
 │   │   ├── views/                — Reusable panels (subclass UIView)
 │   │   │   ├── topology_preview_view.h
 │   │   │   ├── net_viewer_view.h
-│   │   │   └── test_bench_view.h
+│   │   │   ├── test_bench_view.h
+│   │   │   ├── arena_config_view.h
+│   │   │   ├── arena_game_view.h
+│   │   │   └── arena_game_info_view.h
 │   │   └── modals/               — Popup dialogs (subclass UIModal)
 │   │       ├── confirm_modal.h
 │   │       ├── editor_modal.h
@@ -56,18 +64,28 @@ neuroflyer/
 │   │   ├── pause_evolution.h     — Evolution settings tab content
 │   │   └── structural_heatmap.h  — Structural analysis heatmap
 │   ├── renderers/
-│   │   └── variant_net_render.h  — render_variant_net(): ShipDesign → configured net render
+│   │   └── variant_net_render.h  — build_variant_net_config(): ShipDesign + NetType -> configured net render (Solo/Fighter/SquadLeader/NTM label schemes)
 │   ├── app_state.h               — AppState, GenStats, dirty flags, go_to_screen() (legacy)
 │   ├── config.h                  — GameConfig: scoring, population, ship, world params
 │   ├── constants.h               — SCREEN_W, SCREEN_H
-│   ├── collision.h               — ray_circle_intersect, point_in_circle (inline)
-│   ├── game.h                    — Tower, Token, Bullet, Triangle, GameSession
+│   ├── collision.h               — Collision math: ray_circle_intersect, point_in_circle, bullet/triangle/circle collisions (rotated and non-rotated variants for arena)
+│   ├── game.h                    — Tower, Token, Bullet (directional with max range), Triangle (rotation + arena thrust model), GameSession
 │   ├── evolution.h               — Individual (StructuredGenome), EvolutionConfig, population ops
 │   ├── renderer.h                — SDL2 split-screen renderer + deferred draw queue
-│   ├── sensor_engine.h           — Single source of truth: query_sensor, build_ship_input, decode_output
-│   ├── ship_design.h             — ShipDesign, SensorDef (uint16_t id), EvolvableFlags, NodeStyle
-│   ├── snapshot.h                — Snapshot, SnapshotHeader, GenomeInfo structs
-│   ├── snapshot_io.h             — Binary save/load (NFS format v1-v4, CRC32)
+│   ├── sensor_engine.h           — Scroller sensor source of truth: query_sensor, build_ship_input, decode_output
+│   ├── arena_config.h            — ArenaConfig: world size, team count, towers, tokens, sector grid, fitness weights
+│   ├── arena_session.h           — ArenaSession: arena world state, tick loop, squad stats
+│   ├── arena_match.h             — ArenaMatch: multi-generation match runner for team evolution
+│   ├── arena_sensor.h            — Arena sensor system: rotation-aware query_arena_sensor, build_arena_ship_input, ArenaQueryContext
+│   ├── fighter_drill_session.h   — FighterDrillSession, FighterDrillConfig, DrillPhase enum
+│   ├── base.h                    — Base struct: team starbase with position, health, team_id
+│   ├── camera.h                  — Camera struct: pan/zoom for arena viewport
+│   ├── sector_grid.h             — SectorGrid: spatial index for NTM threat queries
+│   ├── squad_leader.h            — NTM, OrderType enums, squad leader execution functions
+│   ├── team_evolution.h          — TeamIndividual (3 nets: NTM + squad leader + fighter), team evolution ops
+│   ├── ship_design.h             — ShipDesign, SensorDef (uint16_t id, is_full_sensor), EvolvableFlags, NodeStyle
+│   ├── snapshot.h                — Snapshot, SnapshotHeader, NetType enum (Solo/Fighter/SquadLeader/NTM), GenomeInfo
+│   ├── snapshot_io.h             — Binary save/load (NFS format v1-v7, CRC32)
 │   ├── snapshot_utils.h          — snapshot_to_individual() conversion
 │   ├── genome_manager.h          — Genome/variant filesystem + cross-genome lineage
 │   ├── mrca_tracker.h            — Elite lineage tracking with pruning + degradation
@@ -76,13 +94,20 @@ neuroflyer/
 │   └── paths.h                   — data_dir(), asset_dir(), format_short_date()
 ├── src/
 │   ├── engine/                   — Pure logic (ZERO SDL/ImGui deps)
-│   │   ├── game.cpp              — Game mechanics, collision, spawning, scoring
+│   │   ├── game.cpp              — Scroller game mechanics, collision, spawning, scoring
 │   │   ├── evolution.cpp         — StructuredGenome evolution, topology mutations
 │   │   ├── config.cpp            — GameConfig JSON save/load
-│   │   ├── snapshot_io.cpp       — Binary I/O for snapshots (NFS v1-v4)
+│   │   ├── snapshot_io.cpp       — Binary I/O for snapshots (NFS v1-v7)
 │   │   ├── genome_manager.cpp    — Filesystem ops + lineage.json + genomic_lineage.json
 │   │   ├── mrca_tracker.cpp      — Elite lineage tracking
-│   │   ├── sensor_engine.cpp     — Sensor detection + input encoding + display helpers
+│   │   ├── sensor_engine.cpp     — Scroller sensor detection + input encoding + display helpers
+│   │   ├── arena_session.cpp     — Arena world tick loop, collision, squad stats
+│   │   ├── arena_match.cpp       — Multi-generation arena match runner
+│   │   ├── arena_sensor.cpp      — Rotation-aware arena sensors + fighter input builder
+│   │   ├── fighter_drill_session.cpp — Drill world simulation, phase scoring
+│   │   ├── sector_grid.cpp       — Spatial indexing for NTM queries
+│   │   ├── squad_leader.cpp      — NTM execution, squad leader net, order decoding
+│   │   ├── team_evolution.cpp    — Team-level evolution (3-net TeamIndividual)
 │   │   ├── ray.cpp               — Ray-circle intersection (visualization only)
 │   │   └── paths.cpp             — File path utilities
 │   ├── ui/                       — SDL/ImGui rendering and interaction
@@ -110,7 +135,13 @@ neuroflyer/
 │   │   │   │   └── lineage_tree_screen.cpp
 │   │   │   ├── game/             — Training/flying screens
 │   │   │   │   ├── fly_session_screen.cpp
-│   │   │   │   └── pause_config_screen.cpp
+│   │   │   │   ├── pause_config_screen.cpp
+│   │   │   │   ├── fighter_drill_screen.cpp
+│   │   │   │   └── fighter_drill_pause_screen.cpp
+│   │   │   ├── arena/            — Arena mode screens
+│   │   │   │   ├── arena_config_screen.cpp
+│   │   │   │   ├── arena_game_screen.cpp
+│   │   │   │   └── arena_pause_screen.cpp
 │   │   │   └── analysis/         — Analysis tools
 │   │   │       └── analysis.cpp
 │   │   ├── views/                — View implementations (reusable panels)
@@ -123,16 +154,20 @@ neuroflyer/
 │   │   │   ├── fitness_editor.cpp      — Scoring parameter sliders
 │   │   │   ├── pause_training.cpp      — Training tab content
 │   │   │   ├── pause_evolution.cpp     — Evolution settings tab content
-│   │   │   └── structural_heatmap.cpp  — Structural analysis heatmap
+│   │   │   ├── structural_heatmap.cpp  — Structural analysis heatmap
+│   │   │   ├── arena_config_view.cpp   — Arena configuration panel
+│   │   │   ├── arena_game_view.cpp     — Arena world renderer (SDL)
+│   │   │   └── arena_game_info_view.cpp — Arena HUD (team stats, scores)
 │   │   └── renderers/            — SDL rendering helpers
 │   │       ├── variant_net_render.cpp  — NeuroFlyer-specific net render wrapper
 │   │       ├── starfield.cpp           — Parallax star background
 │   │       └── occulus.cpp             — Ellipse sensor visualization
-├── tests/                        — GoogleTests
+├── tests/                        — GoogleTests (21 files: scroller, arena, drill, evolution, snapshot, collision, sensors)
 ├── assets/                       — Sprites (ships, asteroids, coins, stars, hangar bg)
 └── docs/
     ├── backlog.md                — Feature backlog (keep updated!)
     ├── feature-audit.md          — System-by-system status audit
+    ├── arena-mode-backlog.md     — Arena-specific backlog items
     └── superpowers/              — Design specs and implementation plans
 ```
 
@@ -143,11 +178,18 @@ MainMenuScreen → push(FlySessionScreen) → push(PauseConfigScreen)
                │                           └── tabs: Training, Evolution, Analysis, Save Variants
                → push(SettingsScreen)
                → push(HangarScreen) → push(CreateGenomeScreen)
-                                     → push(VariantViewerScreen)
-                                        → embeds: NetViewerView, TestBenchView
-                                        → push(VariantNetEditorScreen) (zoomable net editor)
-                                        → push(LineageTreeScreen)
-                                        → push(FlySessionScreen) (training)
+               │                     → push(VariantViewerScreen)
+               │                        → embeds: NetViewerView, TestBenchView
+               │                        → push(VariantNetEditorScreen) (zoomable net editor)
+               │                        → push(LineageTreeScreen)
+               │                        → push(FlySessionScreen) (training)
+               │                        → push(FighterDrillScreen) (fighter drill training)
+               │                           → Space: push(FighterDrillPauseScreen)
+               │                              → tabs: Evolution, Save Variants
+               → push(ArenaConfigScreen) → push(ArenaGameScreen)
+                                            → Space: push(ArenaPauseScreen)
+                                            │   → Save squad leader + NTM variants
+                                            → follow mode: net viewer (Fighter/SquadLeader toggle)
 ```
 
 **Navigation:** `UIManager::push_screen()` / `pop_screen()` / `replace_screen()`. Screens subclass `UIScreen` and implement `on_draw(AppState&, Renderer&, UIManager&)`. Components take specific data + callbacks (not AppState), so they're reusable.
@@ -160,9 +202,10 @@ MainMenuScreen → push(FlySessionScreen) → push(PauseConfigScreen)
 
 - **Inputs:** Configurable via sensor genes (rays or occulus ovals) + position + recurrent memory
 - **Hidden:** Evolving topology — layers and nodes mutate
-- **Outputs (5):** UP, DOWN, LEFT, RIGHT, SHOOT
+- **Outputs:** 5 action outputs (UP, DOWN, LEFT, RIGHT, SHOOT) + optional recurrent memory outputs. Squad leader nets use 5 outputs differently: 3 tactical orders + 2 spacing orders via argmax.
 - **Genome:** `StructuredGenome` with weight genes + sensor genes + topology genes
 - **Recurrent memory:** Hidden layer activations feed back as extra inputs next tick
+- **NetType:** `NetType` enum (Solo/Fighter/SquadLeader/NTM) stored in snapshots, determines which input/output labels the net viewer displays
 
 ## Genome Management (Hangar)
 
@@ -172,7 +215,7 @@ Genomes are stored as directories in `data/genomes/{name}/`:
 - `lineage.json` — per-genome ancestry tree
 - `data/genomes/genomic_lineage.json` — cross-genome lineage (genome-to-genome promotion links)
 
-Each `.bin` file is self-describing: contains ShipDesign (sensors, memory), network topology, weights, parent link. Binary format versioned (v1 = original, v2 = evolvable flags).
+Each `.bin` file is self-describing: contains ShipDesign (sensors, memory), network topology, weights, parent link. Binary format versioned (v1 = original, v2 = evolvable flags, v3 = activation genes, v4 = parent name, v5 = run count, v6 = paired fighter name, v7 = NetType). Squad leader and NTM variants are saved to `data/genomes/{name}/squad/`.
 
 The hangar lets users browse genomes, create new ones with custom sensor/topology configs, view/promote/delete variants, launch training runs, and view cross-genome lineage trees. Deleting a genome relinks child genomes to the grandparent.
 
@@ -180,19 +223,37 @@ The hangar lets users browse genomes, create new ones with custom sensor/topolog
 
 ## Sensor Engine
 
-`sensor_engine.h` is the **single source of truth** for sensor detection and input encoding:
+### Scroller Sensors (`sensor_engine.h`)
+
+`sensor_engine.h` is the **single source of truth** for scroller sensor detection and input encoding:
 - `query_sensor(SensorDef, ship_pos, towers, tokens)` — dispatches Raycast (ray-circle intersection) or Occulus (ellipse overlap)
 - `build_ship_input(ShipDesign, ...)` — builds complete neural net input vector. Iterates sensors in ShipDesign order (stable IDs).
 - `decode_output(output, memory_slots)` — extracts actions + memory from net output
 - `compute_sensor_shape(SensorDef, ship_pos)` — derives ellipse geometry (shared by detection AND rendering)
 - `build_input_labels/colors/display_order(ShipDesign)` — for net panel display
 - `query_sensors_with_endpoints(ShipDesign, ...)` — sensor positions for visualization
+- `build_squad_leader_input_labels()` — 14 strategic input labels for squad leader nets
+- `build_squad_leader_output_labels()` — 5 tactical/spacing output labels for squad leader nets
 
-**All consumers** (fly mode, test bench, headless) call these functions. No inline detection math anywhere else.
+**All scroller consumers** (fly mode, test bench, headless) call these functions. No inline detection math anywhere else.
 
 Sensor parameters (angle, range, width) are per-variant via `ShipDesign` stored in each snapshot. They are evolvable via `EvolvableFlags` on the design.
 
-## Scoring (defaults, tunable via pause screen)
+`SensorDef` fields include `is_full_sensor` (bool) — when true, the sensor produces 5 input values in arena mode (distance, is_tower, is_token, is_friend, is_bullet) instead of a single distance value. This gives arena fighters entity-type awareness. Does not affect scroller mode sensors.
+
+### Arena Sensors (`arena_sensor.h`)
+
+Arena mode has a parallel sensor system for rotation-aware detection:
+- `query_arena_sensor(SensorDef, ArenaQueryContext)` — dispatches Raycast or Occulus, rotated by ship facing direction. Detects towers, tokens, friendly ships, enemy ships, and bullets. Returns `ArenaSensorReading` with distance and `ArenaHitType`.
+- `build_arena_ship_input(ShipDesign, ctx, squad_inputs..., memory)` — builds the complete fighter input vector: [sensor values] + [6 squad leader inputs] + [memory slots].
+- `ArenaQueryContext` — bundles ship position, rotation, team, and all entity spans for a single sensor query.
+- `is_full_sensor` flag — when true, each sensor produces 5 input values instead of 1. This gives the fighter net entity-type awareness.
+
+Both the arena game screen and fighter drill screen use `build_arena_ship_input()` for their fighter nets.
+
+## Scoring
+
+### Scroller Scoring (defaults, tunable via pause screen)
 
 | Event | Points |
 |-------|--------|
@@ -204,17 +265,97 @@ Sensor parameters (angle, range, width) are per-variant via `ShipDesign` stored 
 
 Position multipliers scale score by screen position (center/edge, top/bottom).
 
+### Arena Scoring (defaults, tunable)
+
+| Factor | Default Weight |
+|--------|---------------|
+| Base damage dealt | 1.0 |
+| Survival time | 0.5 |
+| Ships alive at end | 0.2 |
+| Tokens collected | 0.3 |
+
+### Fighter Drill Scoring
+
+Per-tick velocity-based scoring (prevents spawn-position bias):
+
+| Phase | Scoring Formula |
+|-------|----------------|
+| Expand | dot(velocity, away_from_center) * expand_weight |
+| Contract | dot(velocity, toward_center) * contract_weight |
+| Attack | dot(velocity, toward_starbase) * travel_weight + bullet_hits * hit_bonus |
+
+Always active: +token_bonus per token collected. Tower collision = death (with death_penalty).
+
 ## Evolution
 
-- **Population:** 100 per generation (tunable)
-- **Elitism:** top 10 survive unchanged
+- **Population:** 100 per generation (tunable; default: 10 for GameConfig scroller, 3 for EvolutionConfig)
+- **Elitism:** top N survive unchanged (default: 10 for scroller via GameConfig, 3 for EvolutionConfig)
 - **Selection:** tournament (size 5)
 - **Crossover:** uniform, same-topology only
 - **Weight mutation:** 10% of weights, Gaussian noise
 - **Topology mutations:** add/remove nodes and layers
 - **StructuredGenome:** weight genes + sensor genes (evolving ray/oval configurations)
+- **Team evolution (arena):** `TeamIndividual` wraps 3 nets (NTM + squad leader + fighter). Team-level evolution mutates squad leader and NTM weights; fighter weights can be frozen or co-evolved. Uses `evolve_team_population()` / `evolve_squad_only()`.
+
+## Arena Mode
+
+A top-down 2D arena where teams of ships battle for territory. Each team has a hierarchical brain architecture: **NTM** (Near Threat Matrix) sub-nets evaluate nearby enemies, a **squad leader** net makes tactical decisions from macro state, and **fighter** nets handle sensorimotor control using rotation-aware sensors + squad leader orders.
+
+### Architecture
+
+- **ArenaConfig** (`arena_config.h`) — world size, team count, towers, tokens, sector grid params, fitness weights, squad leader fighter input count.
+- **ArenaSession** (`arena_session.h` / `arena_session.cpp`) — arena world state: ships (Triangle with rotation), towers, tokens, bullets (directional with max range), bases (team starbases with health). Tick loop handles movement (thrust+rotation model), collision (rotated variants), bullet lifecycle, squad stats computation.
+- **ArenaMatch** (`arena_match.h` / `arena_match.cpp`) — multi-generation match runner. Pits team genomes against each other, runs ArenaSession ticks, assigns fitness via configurable weights.
+- **ArenaSensor** (`arena_sensor.h` / `arena_sensor.cpp`) — rotation-aware sensor system. See Sensor Engine section.
+- **SectorGrid** (`sector_grid.h` / `sector_grid.cpp`) — spatial index dividing the arena into sectors. Used by NTM to efficiently find nearby enemies within a Manhattan distance diamond.
+- **SquadLeader** (`squad_leader.h` / `squad_leader.cpp`) — NTM execution (shared-weight sub-net per nearby enemy, top-1 threat selection), squad leader net forward pass, order decoding (argmax over tactical/spacing output groups).
+- **TeamEvolution** (`team_evolution.h` / `team_evolution.cpp`) — `TeamIndividual` wraps 3 nets. `create_team_population()`, `evolve_team_population()`, `evolve_squad_only()`.
+- **Base** (`base.h`) — team starbase with position, health, team_id.
+- **Camera** (`camera.h`) — pan/zoom viewport for arena rendering.
+
+### UI Screens
+
+- **ArenaConfigScreen** — configuration UI before match start (world size, team count, etc.)
+- **ArenaGameScreen** — main arena training loop. Drives tick loop, renders via ArenaGameView, supports follow mode with live net viewer (Fighter/SquadLeader toggle).
+- **ArenaPauseScreen** — save squad leader + companion NTM variants to `squad/` subdirectory. Syncs per-node activations from genome genes.
+
+### Movement Model
+
+Arena ships use rotation + thrust (not scroller's strafe model). `Triangle::apply_arena_actions()` handles turning and forward thrust. Bullets fire in facing direction with max range cutoff and directional travel.
+
+## Fighter Drill Mode
+
+A specialized training mode for fighter nets. Instead of a real evolved squad leader, the system injects **scripted squad leader inputs** through three timed phases (Expand, Contract, Attack). Fighters are scored on how well they follow commands, then evolved using individual-based evolution.
+
+### Architecture
+
+- **FighterDrillSession** (`fighter_drill_session.h` / `fighter_drill_session.cpp`) — pure engine class. Manages a small arena world (4000x4000) with ships, towers, tokens, one enemy starbase, and bullets. Tracks `DrillPhase` enum (Expand/Contract/Attack/Done) with configurable phase timing.
+- **FighterDrillScreen** (`ui/screens/fighter_drill_screen.h` / `game/fighter_drill_screen.cpp`) — UIScreen driving the training loop. Computes scripted squad inputs per phase, runs arena sensors via `build_arena_ship_input()`, forwards fighter nets, decodes outputs, ticks the session, and renders via direct SDL.
+- **FighterDrillPauseScreen** (`ui/screens/fighter_drill_pause_screen.h` / `game/fighter_drill_pause_screen.cpp`) — pause overlay with two tabs: Evolution (mutation rates) and Save Variants (multi-select fighters to save as named variants to `squad/` directory).
+
+### Entry Point
+
+From the Variant Viewer screen, select a fighter variant and click "Fighter Drill." The variant is converted to a fighter net (if not already) via `convert_variant_to_fighter()`, then mutated copies are seeded.
+
+### Drill Phases
+
+Three sequential phases, 20 seconds each (1200 ticks at 60fps):
+
+| Phase | Scripted Squad Inputs | Scoring |
+|-------|----------------------|---------|
+| Expand | spacing=+1, aggression=0, no target | Movement away from squad center |
+| Contract | spacing=-1, aggression=0, no target | Movement toward squad center |
+| Attack | spacing=0, aggression=+1, target=starbase | Movement toward starbase + bullet hits |
+
+All scoring is velocity-dot-product-based (per-tick), not position-based.
+
+### Evolution
+
+Individual-based (same as scroller). Uses `evolve_population()` directly — no TeamIndividual wrappers.
 
 ## Controls
+
+### Scroller Controls
 
 | Key | Action |
 |-----|--------|
@@ -224,6 +365,18 @@ Position multipliers scale score by screen position (center/edge, top/bottom).
 | H | Print scoring rules to console |
 | Escape | Quit / Back |
 | Hover | Mouse over neural net nodes to inspect weights |
+
+### Arena / Fighter Drill Controls
+
+| Key | Action |
+|-----|--------|
+| Tab | Cycle camera: SWARM / BEST / WORST |
+| Space | Pause (push pause screen) |
+| 1-4 | Speed (1x/5x/20x/100x) |
+| F | Toggle follow mode (track individual ship) |
+| Escape | Exit to previous screen |
+| Mouse drag | Pan camera |
+| Shift+scroll | Zoom |
 
 ## Building & Running
 
@@ -317,9 +470,17 @@ All new UI features MUST use the 4-layer UI framework. Do NOT create standalone 
 | Screen | `FlySessionScreen` | `ui/screens/fly_session_screen.h` | `ui/screens/game/fly_session_screen.cpp` |
 | Screen | `SettingsScreen` | `ui/screens/settings_screen.h` | `ui/screens/menu/settings_screen.cpp` |
 | Screen | `VariantNetEditorScreen` | `ui/screens/hangar/variant_net_editor_screen.h` | `ui/screens/hangar/variant_net_editor_screen.cpp` |
+| Screen | `ArenaConfigScreen` | `ui/screens/arena_config_screen.h` | `ui/screens/arena/arena_config_screen.cpp` |
+| Screen | `ArenaGameScreen` | `ui/screens/arena_game_screen.h` | `ui/screens/arena/arena_game_screen.cpp` |
+| Screen | `ArenaPauseScreen` | `ui/screens/arena_pause_screen.h` | `ui/screens/arena/arena_pause_screen.cpp` |
+| Screen | `FighterDrillScreen` | `ui/screens/fighter_drill_screen.h` | `ui/screens/game/fighter_drill_screen.cpp` |
+| Screen | `FighterDrillPauseScreen` | `ui/screens/fighter_drill_pause_screen.h` | `ui/screens/game/fighter_drill_pause_screen.cpp` |
 | View | `TopologyPreviewView` | `ui/views/topology_preview_view.h` | `ui/views/topology_preview_view.cpp` |
 | View | `NetViewerView` | `ui/views/net_viewer_view.h` | `ui/views/net_viewer_view.cpp` |
 | View | `TestBenchView` | `ui/views/test_bench_view.h` | `ui/views/test_bench_view.cpp` |
+| View | `ArenaConfigView` | `ui/views/arena_config_view.h` | `ui/views/arena_config_view.cpp` |
+| View | `ArenaGameView` | `ui/views/arena_game_view.h` | `ui/views/arena_game_view.cpp` |
+| View | `ArenaGameInfoView` | `ui/views/arena_game_info_view.h` | `ui/views/arena_game_info_view.cpp` |
 | Modal | `ConfirmModal` | `ui/modals/confirm_modal.h` | `ui/framework/modals/confirm_modal.cpp` |
 | Modal | `NodeEditorModal` | `ui/modals/node_editor_modal.h` | `ui/modals/node_editor_modal.cpp` |
 | Modal | `LayerEditorModal` | `ui/modals/layer_editor_modal.h` | `ui/modals/layer_editor_modal.cpp` |
@@ -334,13 +495,18 @@ All new UI features MUST use the 4-layer UI framework. Do NOT create standalone 
 - **Engine/UI split** — `src/engine/` has zero SDL/ImGui deps, `src/ui/` has all rendering. Clean separation.
 - **Composable components** — net viewer, test bench, lineage graph, fitness editor are not screen-specific. They use callbacks (e.g., `on_node_click`) instead of knowing about UIManager.
 - **Frame-based fly session** — game loop converted from blocking nested loops to one-frame-per-call, enabling clean pause/resume via screen transitions
-- **neuralnet-ui library** — generic neural net rendering lives in `libs/neuralnet-ui/`, NeuroFlyer-specific wrapper in `src/ui/renderers/variant_net_render.cpp`. Two-layer design: `render_neural_net()` (generic) + `render_variant_net()` (NeuroFlyer-specific). The renderer supports `text_scale` for scaled bitmap font at higher zoom levels.
+- **neuralnet-ui library** — generic neural net rendering lives in `libs/neuralnet-ui/`, NeuroFlyer-specific wrapper in `src/ui/renderers/variant_net_render.cpp`. Two-layer design: `render_neural_net()` (generic) + `build_variant_net_config()` (NeuroFlyer-specific, switches label/color scheme based on `NetType`). The renderer supports `text_scale` for scaled bitmap font at higher zoom levels.
 - **Net viewer zoom** — `NetViewerViewState` has `zoom`, `scroll_x`, `zoom_enabled` fields. The variant net editor defaults to 2x zoom with Shift+scroll to adjust. The view renders into a zoom-scaled off-screen SDL canvas and blits a viewport-sized window from it. Mouse coordinates are correctly mapped through the zoom+scroll transform.
 - **StructuredGenome** — evolved sensor configurations alongside weights and topology. Per-node activation functions.
 - **Recurrent not stacked frames** — net develops its own memory
 - **Sensor engine as single source of truth** — one set of functions for detection, input encoding, and output decoding. No inline math in screens. Visual sorting via display permutation (doesn't affect functional data order).
 - **ShipDesign per variant, not global** — sensor config lives on each saved variant, not on GameConfig. Editing one variant's sensors doesn't affect others.
 - **Shared library repos** — neuralnet and evolve are independent repos shared by EcoSim, NeuroFlyer, and AntSim
+- **Duplicated arena physics in fighter drill** — `FighterDrillSession` duplicates collision and movement math from `ArenaSession` rather than extracting a shared module. Intentional scope decision to keep fighter drill self-contained.
+- **Velocity-based drill scoring** — drill phases score using per-tick `dot(velocity, desired_direction)`, not absolute position. Prevents a fighter's spawn position from unfairly affecting fitness.
+- **Rotated + non-rotated collision variants** — `collision.h` provides both `bullet_triangle_collision()` (scroller, ships face up) and `bullet_triangle_collision_rotated()` (arena, ships have facing direction). Both kept to avoid unnecessary trig in scroller mode.
+- **Hierarchical team brain** — arena teams use 3 co-evolved nets: NTM (threat scoring per nearby enemy), squad leader (tactical orders from macro state), fighter (sensorimotor control from sensors + squad orders). The NTM uses shared weights duplicated per nearby enemy with top-1 threat selection via `SectorGrid`.
+- **Team evolution** — `TeamIndividual` bundles 3 nets. `evolve_team_population()` mutates squad leader + NTM; `evolve_squad_only()` freezes fighter weights. Individual fighters use standard `evolve_population()` in drill mode.
 
 ## Standards & Practices
 
