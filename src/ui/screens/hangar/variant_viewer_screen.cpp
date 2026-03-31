@@ -5,6 +5,7 @@
 #include <neuroflyer/ui/screens/fly_session_screen.h>
 #include <neuroflyer/ui/screens/lineage_tree_screen.h>
 #include <neuroflyer/ui/ui_manager.h>
+#include <neuroflyer/ui/ui_widget.h>
 
 #include <neuroflyer/ui/modals/confirm_modal.h>
 #include <neuroflyer/ui/modals/fighter_pairing_modal.h>
@@ -467,6 +468,65 @@ VariantViewerScreen::Action VariantViewerScreen::draw_variant_list(
     draw_tab_bar();
 
     if (active_tab_ == NetTypeTab::Fighters) {
+        // ---- Filter toggle: All | Solo | Squad ----
+        {
+            constexpr float FILTER_BTN_W = 60.0f;
+
+            struct FilterBtn { const char* label; FilterMode mode; };
+            const FilterBtn FILTER_BTNS[] = {
+                {"All",   FilterMode::All},
+                {"Solo",  FilterMode::SoloOnly},
+                {"Squad", FilterMode::SquadOnly},
+            };
+
+            for (const auto& fb : FILTER_BTNS) {
+                bool is_active = (fighter_filter_ == fb.mode);
+                if (ui::button(fb.label,
+                        is_active ? ui::ButtonStyle::Primary
+                                  : ui::ButtonStyle::Secondary,
+                        FILTER_BTN_W)) {
+                    if (!is_active) {
+                        fighter_filter_ = fb.mode;
+                        // Reset selection if current selection is no longer visible
+                        if (!vs_.variants.empty() && vs_.selected_idx >= 0 &&
+                            static_cast<std::size_t>(vs_.selected_idx) <
+                                vs_.variants.size()) {
+                            const auto& sel = vs_.variants[
+                                static_cast<std::size_t>(vs_.selected_idx)];
+                            bool still_visible =
+                                (fb.mode == FilterMode::All) ||
+                                (fb.mode == FilterMode::SoloOnly &&
+                                    sel.net_type == NetType::Solo) ||
+                                (fb.mode == FilterMode::SquadOnly &&
+                                    sel.net_type == NetType::Fighter);
+                            if (!still_visible) {
+                                vs_.selected_idx = -1;
+                                for (int i = 0;
+                                     i < static_cast<int>(vs_.variants.size());
+                                     ++i) {
+                                    const auto& v = vs_.variants[
+                                        static_cast<std::size_t>(i)];
+                                    bool visible =
+                                        (fb.mode == FilterMode::All) ||
+                                        (fb.mode == FilterMode::SoloOnly &&
+                                            v.net_type == NetType::Solo) ||
+                                        (fb.mode == FilterMode::SquadOnly &&
+                                            v.net_type == NetType::Fighter);
+                                    if (visible) {
+                                        vs_.selected_idx = i;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                ImGui::SameLine();
+            }
+            ImGui::NewLine();
+            ImGui::Dummy(ImVec2(0, 4));
+        }
+
         // ---- Fighter variant table ----
         if (vs_.variants.empty()) {
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
