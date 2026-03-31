@@ -468,12 +468,18 @@ VariantViewerScreen::Action VariantViewerScreen::draw_variant_list(
     draw_tab_bar();
 
     if (active_tab_ == NetTypeTab::Fighters) {
+        auto is_visible = [](FilterMode mode, NetType nt) -> bool {
+            return mode == FilterMode::All ||
+                   (mode == FilterMode::SoloOnly  && nt == NetType::Solo) ||
+                   (mode == FilterMode::SquadOnly && nt == NetType::Fighter);
+        };
+
         // ---- Filter toggle: All | Solo | Squad ----
         {
             constexpr float FILTER_BTN_W = 60.0f;
 
             struct FilterBtn { const char* label; FilterMode mode; };
-            const FilterBtn FILTER_BTNS[] = {
+            constexpr FilterBtn FILTER_BTNS[] = {
                 {"All",   FilterMode::All},
                 {"Solo",  FilterMode::SoloOnly},
                 {"Squad", FilterMode::SquadOnly},
@@ -493,26 +499,14 @@ VariantViewerScreen::Action VariantViewerScreen::draw_variant_list(
                                 vs_.variants.size()) {
                             const auto& sel = vs_.variants[
                                 static_cast<std::size_t>(vs_.selected_idx)];
-                            bool still_visible =
-                                (fb.mode == FilterMode::All) ||
-                                (fb.mode == FilterMode::SoloOnly &&
-                                    sel.net_type == NetType::Solo) ||
-                                (fb.mode == FilterMode::SquadOnly &&
-                                    sel.net_type == NetType::Fighter);
-                            if (!still_visible) {
+                            if (!is_visible(fb.mode, sel.net_type)) {
                                 vs_.selected_idx = -1;
                                 for (int i = 0;
                                      i < static_cast<int>(vs_.variants.size());
                                      ++i) {
                                     const auto& v = vs_.variants[
                                         static_cast<std::size_t>(i)];
-                                    bool visible =
-                                        (fb.mode == FilterMode::All) ||
-                                        (fb.mode == FilterMode::SoloOnly &&
-                                            v.net_type == NetType::Solo) ||
-                                        (fb.mode == FilterMode::SquadOnly &&
-                                            v.net_type == NetType::Fighter);
-                                    if (visible) {
+                                    if (is_visible(fb.mode, v.net_type)) {
                                         vs_.selected_idx = i;
                                         break;
                                     }
