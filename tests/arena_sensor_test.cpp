@@ -1,4 +1,5 @@
 #include <neuroflyer/arena_sensor.h>
+#include <neuroflyer/sensor_engine.h>
 #include <neuroflyer/ship_design.h>
 #include <gtest/gtest.h>
 #include <cmath>
@@ -300,4 +301,120 @@ TEST(ArenaSensorTest, OcculusDetectsBullet) {
     auto reading = nf::query_arena_sensor(sensor, ctx);
     EXPECT_LT(reading.distance, 1.0f);
     EXPECT_EQ(reading.entity_type, nf::ArenaHitType::Bullet);
+}
+
+// --- ellipse_overlap_distance() unit tests (CONS-003/ARCH-005) ---
+
+TEST(ArenaSensorTest, RaycastNormalizedDistance) {
+    // A ship at 500,500 facing up with range=200.
+    // An enemy at 500,400 (100px away) should have distance ~0.5.
+    nf::SensorDef sensor;
+    sensor.type = nf::SensorType::Raycast;
+    sensor.angle = 0.0f;
+    sensor.range = 200.0f;
+    sensor.width = 0.0f;
+    sensor.is_full_sensor = true;
+    sensor.id = 1;
+
+    nf::ArenaQueryContext ctx;
+    ctx.ship_x = 500.0f;
+    ctx.ship_y = 500.0f;
+    ctx.ship_rotation = 0.0f;
+    ctx.self_index = 0;
+    ctx.self_team = 0;
+
+    std::vector<nf::Triangle> ships = {
+        nf::Triangle(500.0f, 500.0f),
+        nf::Triangle(500.0f, 400.0f),
+    };
+    std::vector<int> ship_teams = {0, 1};
+    ctx.ships = ships;
+    ctx.ship_teams = ship_teams;
+
+    auto reading = nf::query_arena_sensor(sensor, ctx);
+    // Ship center is ~100px away, but hit circle radius is Triangle::SIZE * 0.8.
+    // The distance should be roughly (100 - hit_r) / 200.
+    EXPECT_GT(reading.distance, 0.2f);
+    EXPECT_LT(reading.distance, 0.6f);
+    EXPECT_EQ(reading.entity_type, nf::ArenaHitType::EnemyShip);
+}
+
+// --- ellipse_overlap_distance() unit tests (CONS-003/ARCH-005) ---
+
+TEST(SensorEngineTest, EllipseOverlapHitInsideEllipse) {
+    nf::SensorShape shape;
+    shape.center_x = 500.0f;
+    shape.center_y = 385.0f;
+    shape.major_radius = 100.0f;
+    shape.minor_radius = 57.5f;
+    shape.rotation = 0.0f;
+
+    float d = nf::ellipse_overlap_distance(shape, 500.0f, 500.0f,
+                                            500.0f, 385.0f, 10.0f);
+    EXPECT_GE(d, 0.0f);
+    EXPECT_LT(d, 1.0f);
+}
+
+TEST(SensorEngineTest, EllipseOverlapMissOutsideEllipse) {
+    nf::SensorShape shape;
+    shape.center_x = 500.0f;
+    shape.center_y = 385.0f;
+    shape.major_radius = 100.0f;
+    shape.minor_radius = 57.5f;
+    shape.rotation = 0.0f;
+
+    float d = nf::ellipse_overlap_distance(shape, 500.0f, 500.0f,
+                                            800.0f, 385.0f, 10.0f);
+    EXPECT_LT(d, 0.0f);
+}
+
+TEST(SensorEngineTest, EllipseOverlapDistanceIncreasesWithRange) {
+    // rotation=0 means major axis is horizontal (x direction).
+    // Place two objects along the major axis at different x offsets from center
+    // so both are inside the ellipse but at different distances from the ship.
+    nf::SensorShape shape;
+    shape.center_x = 500.0f;
+    shape.center_y = 385.0f;
+    shape.major_radius = 100.0f;
+    shape.minor_radius = 57.5f;
+    shape.rotation = 0.0f;
+
+    // Near: at ellipse center — distance from ship (500,500) ~= 115 units
+    float d_near = nf::ellipse_overlap_distance(shape, 500.0f, 500.0f,
+                                                 500.0f, 385.0f, 10.0f);
+    // Far: shifted 80 units right along major axis — distance from ship ~= 140 units
+    float d_far = nf::ellipse_overlap_distance(shape, 500.0f, 500.0f,
+                                                580.0f, 385.0f, 10.0f);
+    ASSERT_GE(d_near, 0.0f);
+    ASSERT_GE(d_far, 0.0f);
+    EXPECT_LT(d_near, d_far);
+}
+
+// --- ArenaQueryContext::for_ship() factory (ARCH-009/CONS-009) ---
+
+TEST(ArenaSensorTest, ForShipFactoryBuildsContext) {
+    nf::Triangle ship(500.0f, 400.0f);
+    ship.rotation = 1.5f;
+    ship.alive = true;
+
+    std::vector<nf::Tower> towers = {{100.0f, 200.0f, 15.0f, true}};
+    std::vector<nf::Token> tokens;
+    std::vector<nf::Triangle> ships = {ship, nf::Triangle(300.0f, 300.0f)};
+    std::vector<int> ship_teams = {0, 1};
+    std::vector<nf::Bullet> bullets;
+
+    auto ctx = nf::ArenaQueryContext::for_ship(
+        ship, 0, 0, 1000.0f, 800.0f,
+        towers, tokens, ships, ship_teams, bullets);
+
+    EXPECT_FLOAT_EQ(ctx.ship_x, 500.0f);
+    EXPECT_FLOAT_EQ(ctx.ship_y, 400.0f);
+    EXPECT_FLOAT_EQ(ctx.ship_rotation, 1.5f);
+    EXPECT_EQ(ctx.self_index, 0u);
+    EXPECT_EQ(ctx.self_team, 0);
+    EXPECT_FLOAT_EQ(ctx.world_w, 1000.0f);
+    EXPECT_FLOAT_EQ(ctx.world_h, 800.0f);
+    EXPECT_EQ(ctx.towers.size(), 1u);
+    EXPECT_EQ(ctx.ships.size(), 2u);
+    EXPECT_EQ(ctx.ship_teams.size(), 2u);
 }

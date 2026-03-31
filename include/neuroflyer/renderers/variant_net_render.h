@@ -31,4 +31,13 @@ struct VariantNetConfig {
 [[nodiscard]] neuralnet_ui::NetRenderConfig build_variant_net_config(
     const VariantNetConfig& config);
 
+/// Build input node colors for solo/scroller nets from a ShipDesign.
+/// Green=sight, Purple=sensor, Blue=system, Red=memory.
+/// Presentation-only — uses theme colors. Not needed by engine code.
+[[nodiscard]] std::vector<NodeStyle> build_input_colors(const ShipDesign& design);
+
+/// Build input node colors for arena fighter nets from a ShipDesign.
+/// Green=sight, Purple=sensor, Yellow=squad inputs, Red=memory.
+[[nodiscard]] std::vector<NodeStyle> build_arena_fighter_input_colors(const ShipDesign& design);
+
 } // namespace neuroflyer

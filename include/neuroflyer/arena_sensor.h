@@ -33,6 +33,16 @@ struct ArenaQueryContext {
     std::span<const Triangle> ships;
     std::span<const int> ship_teams;   // parallel to ships
     std::span<const Bullet> bullets;
+
+    /// Build a context for querying sensors from a specific ship's perspective.
+    [[nodiscard]] static ArenaQueryContext for_ship(
+        const Triangle& ship, std::size_t index, int team,
+        float world_w, float world_h,
+        std::span<const Tower> towers,
+        std::span<const Token> tokens,
+        std::span<const Triangle> ships,
+        std::span<const int> ship_teams,
+        std::span<const Bullet> bullets);
 };
 
 struct ArenaSensorReading {
@@ -71,9 +81,6 @@ struct DirRange {
 
 /// Build input labels for arena fighter nets.
 [[nodiscard]] std::vector<std::string> build_arena_fighter_input_labels(const ShipDesign& design);
-
-/// Build input colors for arena fighter nets.
-[[nodiscard]] std::vector<NodeStyle> build_arena_fighter_input_colors(const ShipDesign& design);
 
 /// Build display order for arena fighter nets.
 [[nodiscard]] std::vector<std::size_t> build_arena_fighter_display_order(const ShipDesign& design);

@@ -322,20 +322,12 @@ void FighterDrillScreen::run_tick() {
         }
 
         // Build arena sensor input context
-        ArenaQueryContext ctx;
-        ctx.ship_x = ships[i].x;
-        ctx.ship_y = ships[i].y;
-        ctx.ship_rotation = ships[i].rotation;
-        ctx.world_w = drill_config_.world_width;
-        ctx.world_h = drill_config_.world_height;
-        ctx.self_index = i;
-        ctx.self_team = 0;
-        ctx.towers = session_->towers();
-        ctx.tokens = session_->tokens();
-        ctx.ships = session_->ships();
         // All ships on same team (0) — they see each other as friendly
-        ctx.ship_teams = drill_ship_teams_;
-        ctx.bullets = session_->bullets();
+        auto ctx = ArenaQueryContext::for_ship(
+            ships[i], i, 0,
+            drill_config_.world_width, drill_config_.world_height,
+            session_->towers(), session_->tokens(),
+            session_->ships(), drill_ship_teams_, session_->bullets());
 
         auto input = build_arena_ship_input(
             ship_design_, ctx,

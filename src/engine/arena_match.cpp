@@ -137,19 +137,11 @@ ArenaMatchResult run_arena_match(
                 arena_config.world_width, arena_config.world_height);
 
             // Build ArenaQueryContext
-            ArenaQueryContext ctx;
-            ctx.ship_x = arena.ships()[i].x;
-            ctx.ship_y = arena.ships()[i].y;
-            ctx.ship_rotation = arena.ships()[i].rotation;
-            ctx.world_w = arena_config.world_width;
-            ctx.world_h = arena_config.world_height;
-            ctx.self_index = i;
-            ctx.self_team = team;
-            ctx.towers = arena.towers();
-            ctx.tokens = arena.tokens();
-            ctx.ships = arena.ships();
-            ctx.ship_teams = ship_teams;
-            ctx.bullets = arena.bullets();
+            auto ctx = ArenaQueryContext::for_ship(
+                arena.ships()[i], i, team,
+                arena_config.world_width, arena_config.world_height,
+                arena.towers(), arena.tokens(),
+                arena.ships(), ship_teams, arena.bullets());
 
             // Build fighter input
             auto input = build_arena_ship_input(

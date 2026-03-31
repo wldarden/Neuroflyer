@@ -367,19 +367,11 @@ void ArenaGameScreen::tick_arena(AppState& /*state*/) {
             squad_center_xs[t], squad_center_ys[t],
             config_.world_width, config_.world_height);
 
-        ArenaQueryContext ctx;
-        ctx.ship_x = arena_->ships()[i].x;
-        ctx.ship_y = arena_->ships()[i].y;
-        ctx.ship_rotation = arena_->ships()[i].rotation;
-        ctx.world_w = config_.world_width;
-        ctx.world_h = config_.world_height;
-        ctx.self_index = i;
-        ctx.self_team = team;
-        ctx.towers = arena_->towers();
-        ctx.tokens = arena_->tokens();
-        ctx.ships = arena_->ships();
-        ctx.ship_teams = ship_teams_;
-        ctx.bullets = arena_->bullets();
+        auto ctx = ArenaQueryContext::for_ship(
+            arena_->ships()[i], i, team,
+            config_.world_width, config_.world_height,
+            arena_->towers(), arena_->tokens(),
+            arena_->ships(), ship_teams_, arena_->bullets());
 
         auto input = build_arena_ship_input(
             ship_design_, ctx,
