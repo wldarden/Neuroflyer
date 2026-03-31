@@ -1050,6 +1050,7 @@ void VariantViewerScreen::on_draw(
         squad_variants_.clear();
         squad_selected_idx_ = 0;
         paired_fighter_name_.clear();
+        fighter_filter_ = FilterMode::All;
     }
 
     // Ensure lineage graph rebuilds with cross-genome info
