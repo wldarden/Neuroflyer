@@ -31,7 +31,7 @@ public:
 
 private:
     void initialize(AppState& state);
-    void handle_input(UIManager& ui);
+    bool handle_input(UIManager& ui);  // returns true if screen was exited
     void run_tick();
     void evolve_generation(AppState& state);
     void render_world(Renderer& renderer);

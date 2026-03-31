@@ -193,7 +193,7 @@ void FighterDrillScreen::initialize(AppState& state) {
 
 // ==================== Input handling ====================
 
-void FighterDrillScreen::handle_input(UIManager& ui) {
+bool FighterDrillScreen::handle_input(UIManager& ui) {
     // Tab: cycle camera mode
     if (ImGui::IsKeyPressed(ImGuiKey_Tab)) {
         switch (camera_mode_) {
@@ -246,7 +246,10 @@ void FighterDrillScreen::handle_input(UIManager& ui) {
     // Escape: exit
     if (!ui.input_blocked() && ImGui::IsKeyPressed(ImGuiKey_Escape)) {
         ui.pop_screen();
+        return true;  // screen exited
     }
+
+    return false;
 }
 
 // ==================== Tick ====================
@@ -396,6 +399,12 @@ void FighterDrillScreen::evolve_generation(AppState& /*state*/) {
     recurrent_states_.assign(
         population_.size(),
         std::vector<float>(ship_design_.memory_slots, 0.0f));
+
+    // Sync drill_ship_teams_ to match new population size (BUG-003)
+    drill_ship_teams_.assign(population_.size(), 0);
+
+    // Sync drill config population size with evolved population (BUG-002)
+    drill_config_.population_size = population_.size();
 
     generation_++;
 
@@ -788,7 +797,7 @@ void FighterDrillScreen::on_draw(AppState& state, Renderer& renderer,
         initialize(state);
     }
 
-    handle_input(ui);
+    if (handle_input(ui)) return;  // screen was popped
 
     // Tick (unless paused)
     if (!paused_) {
