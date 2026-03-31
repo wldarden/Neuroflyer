@@ -33,6 +33,16 @@ struct ArenaQueryContext {
     std::span<const Triangle> ships;
     std::span<const int> ship_teams;   // parallel to ships
     std::span<const Bullet> bullets;
+
+    /// Build a context for querying sensors from a specific ship's perspective.
+    [[nodiscard]] static ArenaQueryContext for_ship(
+        const Triangle& ship, std::size_t index, int team,
+        float world_w, float world_h,
+        std::span<const Tower> towers,
+        std::span<const Token> tokens,
+        std::span<const Triangle> ships,
+        std::span<const int> ship_teams,
+        std::span<const Bullet> bullets);
 };
 
 struct ArenaSensorReading {

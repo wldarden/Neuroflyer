@@ -390,3 +390,31 @@ TEST(SensorEngineTest, EllipseOverlapDistanceIncreasesWithRange) {
     EXPECT_LT(d_near, d_far);
 }
 
+// --- ArenaQueryContext::for_ship() factory (ARCH-009/CONS-009) ---
+
+TEST(ArenaSensorTest, ForShipFactoryBuildsContext) {
+    nf::Triangle ship(500.0f, 400.0f);
+    ship.rotation = 1.5f;
+    ship.alive = true;
+
+    std::vector<nf::Tower> towers = {{100.0f, 200.0f, 15.0f, true}};
+    std::vector<nf::Token> tokens;
+    std::vector<nf::Triangle> ships = {ship, nf::Triangle(300.0f, 300.0f)};
+    std::vector<int> ship_teams = {0, 1};
+    std::vector<nf::Bullet> bullets;
+
+    auto ctx = nf::ArenaQueryContext::for_ship(
+        ship, 0, 0, 1000.0f, 800.0f,
+        towers, tokens, ships, ship_teams, bullets);
+
+    EXPECT_FLOAT_EQ(ctx.ship_x, 500.0f);
+    EXPECT_FLOAT_EQ(ctx.ship_y, 400.0f);
+    EXPECT_FLOAT_EQ(ctx.ship_rotation, 1.5f);
+    EXPECT_EQ(ctx.self_index, 0u);
+    EXPECT_EQ(ctx.self_team, 0);
+    EXPECT_FLOAT_EQ(ctx.world_w, 1000.0f);
+    EXPECT_FLOAT_EQ(ctx.world_h, 800.0f);
+    EXPECT_EQ(ctx.towers.size(), 1u);
+    EXPECT_EQ(ctx.ships.size(), 2u);
+    EXPECT_EQ(ctx.ship_teams.size(), 2u);
+}
