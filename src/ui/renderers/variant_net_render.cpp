@@ -1,8 +1,10 @@
 #include <neuroflyer/renderers/variant_net_render.h>
 
+#include <neuroflyer/arena_config.h>
 #include <neuroflyer/arena_sensor.h>
 #include <neuroflyer/sensor_engine.h>
 #include <neuroflyer/ship_design.h>
+#include <neuroflyer/ui/theme.h>
 
 #include <neuralnet-ui/render_neural_net.h>
 
@@ -158,6 +160,59 @@ neuralnet_ui::NetRenderConfig build_variant_net_config(
     result.mouse_y = config.mouse_y;
 
     return result;
+}
+
+std::vector<NodeStyle> build_input_colors(const ShipDesign& design) {
+    std::vector<NodeStyle> colors;
+
+    auto ns = [](const theme::Color& c) -> NodeStyle { return {c.r, c.g, c.b}; };
+
+    for (const auto& s : design.sensors) {
+        if (!s.is_full_sensor) {
+            colors.push_back(ns(theme::node_sight));
+        } else {
+            colors.push_back(ns(theme::node_sensor));
+            colors.push_back(ns(theme::node_sensor));
+            colors.push_back(ns(theme::node_sensor));
+            colors.push_back(ns(theme::node_sensor));
+        }
+    }
+
+    colors.push_back(ns(theme::node_system));
+    colors.push_back(ns(theme::node_system));
+    colors.push_back(ns(theme::node_system));
+
+    for (uint16_t m = 0; m < design.memory_slots; ++m) {
+        colors.push_back(ns(theme::node_memory));
+    }
+
+    return colors;
+}
+
+std::vector<NodeStyle> build_arena_fighter_input_colors(const ShipDesign& design) {
+    std::vector<NodeStyle> colors;
+
+    auto ns = [](const theme::Color& c) -> NodeStyle { return {c.r, c.g, c.b}; };
+
+    for (const auto& s : design.sensors) {
+        if (!s.is_full_sensor) {
+            colors.push_back(ns(theme::node_sight));
+        } else {
+            for (int j = 0; j < 5; ++j) {
+                colors.push_back(ns(theme::node_sensor));
+            }
+        }
+    }
+
+    for (std::size_t i = 0; i < ArenaConfig::squad_leader_fighter_inputs; ++i) {
+        colors.push_back({220, 180, 40});  // squad leader yellow
+    }
+
+    for (uint16_t m = 0; m < design.memory_slots; ++m) {
+        colors.push_back(ns(theme::node_memory));
+    }
+
+    return colors;
 }
 
 } // namespace neuroflyer

@@ -5,6 +5,7 @@
 #include <neuroflyer/evolution.h>
 #include <neuroflyer/genome_manager.h>
 #include <neuroflyer/name_validation.h>
+#include <neuroflyer/renderers/variant_net_render.h>
 #include <neuroflyer/sensor_engine.h>
 #include <neuroflyer/ship_design.h>
 

@@ -1,6 +1,5 @@
 #include <neuroflyer/sensor_engine.h>
 #include <neuroflyer/collision.h>
-#include <neuroflyer/ui/theme.h>
 
 #include <algorithm>
 #include <cmath>
@@ -320,36 +319,6 @@ std::vector<std::string> build_input_labels(const ShipDesign& design) {
     }
 
     return labels;
-}
-
-std::vector<NodeStyle> build_input_colors(const ShipDesign& design) {
-    std::vector<NodeStyle> colors;
-
-    // Colors in ShipDesign order (matching input vector order).
-    auto ns = [](const theme::Color& c) -> NodeStyle { return {c.r, c.g, c.b}; };
-
-    for (const auto& s : design.sensors) {
-        if (!s.is_full_sensor) {
-            colors.push_back(ns(theme::node_sight));
-        } else {
-            colors.push_back(ns(theme::node_sensor));
-            colors.push_back(ns(theme::node_sensor));
-            colors.push_back(ns(theme::node_sensor));
-            colors.push_back(ns(theme::node_sensor));
-        }
-    }
-
-    // System inputs: pos_x, pos_y, speed
-    colors.push_back(ns(theme::node_system));
-    colors.push_back(ns(theme::node_system));
-    colors.push_back(ns(theme::node_system));
-
-    // Memory inputs
-    for (uint16_t m = 0; m < design.memory_slots; ++m) {
-        colors.push_back(ns(theme::node_memory));
-    }
-
-    return colors;
 }
 
 std::vector<std::size_t> build_display_order(const ShipDesign& design) {

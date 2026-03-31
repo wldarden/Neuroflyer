@@ -300,38 +300,6 @@ std::vector<std::string> build_arena_fighter_input_labels(const ShipDesign& desi
     return labels;
 }
 
-std::vector<NodeStyle> build_arena_fighter_input_colors(const ShipDesign& design) {
-    std::vector<NodeStyle> colors;
-
-    // Sensor colors: sight = green, full sensor = purple (matching Solo convention).
-    constexpr NodeStyle sight_color  = { 60, 200,  80};   // green
-    constexpr NodeStyle sensor_color = {160,  90, 220};    // purple
-    constexpr NodeStyle squad_color  = {220, 180,  40};    // yellow for squad leader inputs
-    constexpr NodeStyle memory_color = {220,  70,  70};    // red for memory
-
-    for (const auto& s : design.sensors) {
-        if (!s.is_full_sensor) {
-            colors.push_back(sight_color);
-        } else {
-            for (int j = 0; j < 5; ++j) {
-                colors.push_back(sensor_color);
-            }
-        }
-    }
-
-    // Squad leader inputs.
-    for (std::size_t i = 0; i < ArenaConfig::squad_leader_fighter_inputs; ++i) {
-        colors.push_back(squad_color);
-    }
-
-    // Memory.
-    for (uint16_t m = 0; m < design.memory_slots; ++m) {
-        colors.push_back(memory_color);
-    }
-
-    return colors;
-}
-
 std::vector<std::size_t> build_arena_fighter_display_order(const ShipDesign& design) {
     // Identity permutation — no reordering needed for arena fighter nets.
     std::size_t total = compute_arena_input_size(design);

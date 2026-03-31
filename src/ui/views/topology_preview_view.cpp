@@ -1,5 +1,6 @@
 #include <neuroflyer/ui/views/topology_preview_view.h>
 
+#include <neuroflyer/renderers/variant_net_render.h>
 #include <neuroflyer/sensor_engine.h>
 
 #include <neuralnet-ui/render_net_topology.h>

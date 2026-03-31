@@ -97,10 +97,6 @@ struct DecodedOutput {
 /// Returns one label per input (sight/sensor/pos/speed/memory).
 [[nodiscard]] std::vector<std::string> build_input_labels(const ShipDesign& design);
 
-/// Build input node colors from a ShipDesign.
-/// Green=sight, Purple=sensor, Blue=system, Red=memory.
-[[nodiscard]] std::vector<NodeStyle> build_input_colors(const ShipDesign& design);
-
 /// Build a display permutation that sorts input nodes visually by angle.
 /// Sensors sorted -90° to +90° (top to bottom), then system (pos/speed),
 /// then memory at the bottom. display_order[visual_pos] = data_index.

@@ -10,6 +10,7 @@
 #include <neuroflyer/components/test_bench.h>
 #include <neuroflyer/genome_manager.h>
 #include <neuroflyer/paths.h>
+#include <neuroflyer/renderers/variant_net_render.h>
 #include <neuroflyer/sensor_engine.h>
 #include <neuroflyer/ship_design.h>
 #include <neuroflyer/snapshot.h>
