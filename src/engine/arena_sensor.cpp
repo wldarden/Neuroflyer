@@ -100,44 +100,12 @@ ArenaSensorReading query_arena_occulus(
     const SensorDef& sensor,
     const ArenaQueryContext& ctx) {
 
-    // Build a rotated sensor def so compute_sensor_shape uses the absolute angle
     SensorDef rotated = sensor;
     rotated.angle = ctx.ship_rotation + sensor.angle;
-
     auto shape = compute_sensor_shape(rotated, ctx.ship_x, ctx.ship_y);
-
-    float cx = shape.center_x;
-    float cy = shape.center_y;
-    float major_radius = shape.major_radius;
-    float minor_radius = std::max(shape.minor_radius, 0.01f);
-    float cos_r = std::cos(shape.rotation);
-    float sin_r = std::sin(shape.rotation);
 
     float closest_dist = 1.0f;
     ArenaHitType closest_type = ArenaHitType::Nothing;
-
-    // Ellipse overlap check — same math as sensor_engine.cpp query_occulus().
-    // Returns normalized distance [0,1] if inside ellipse, -1 if outside.
-    float max_reach = SHIP_SENSOR_GAP + major_radius * 2.0f;
-
-    auto check_overlap = [&](float ox, float oy, float obj_r) -> float {
-        float ddx = ox - cx;
-        float ddy = oy - cy;
-        float lmaj = ddx * cos_r + ddy * sin_r;
-        float lmin = -ddx * sin_r + ddy * cos_r;
-        float eff_maj = major_radius + obj_r;
-        float eff_min = minor_radius + obj_r;
-        float val = (lmaj * lmaj) / (eff_maj * eff_maj) +
-                    (lmin * lmin) / (eff_min * eff_min);
-        if (val <= 1.0f) {
-            float obj_dx = ox - ctx.ship_x;
-            float obj_dy = oy - ctx.ship_y;
-            float center_dist_val = std::sqrt(obj_dx * obj_dx + obj_dy * obj_dy);
-            float edge_dist = std::max(0.0f, center_dist_val - obj_r);
-            return std::min(edge_dist / max_reach, 1.0f);
-        }
-        return -1.0f;
-    };
 
     auto update_closest = [&](float d, ArenaHitType type) {
         if (d >= 0.0f && d < closest_dist) {
@@ -148,14 +116,18 @@ ArenaSensorReading query_arena_occulus(
 
     for (const auto& tower : ctx.towers) {
         if (!tower.alive) continue;
-        update_closest(check_overlap(tower.x, tower.y, tower.radius),
-                       ArenaHitType::Tower);
+        update_closest(
+            ellipse_overlap_distance(shape, ctx.ship_x, ctx.ship_y,
+                                      tower.x, tower.y, tower.radius),
+            ArenaHitType::Tower);
     }
 
     for (const auto& token : ctx.tokens) {
         if (!token.alive) continue;
-        update_closest(check_overlap(token.x, token.y, token.radius),
-                       ArenaHitType::Token);
+        update_closest(
+            ellipse_overlap_distance(shape, ctx.ship_x, ctx.ship_y,
+                                      token.x, token.y, token.radius),
+            ArenaHitType::Token);
     }
 
     for (std::size_t i = 0; i < ctx.ships.size(); ++i) {
@@ -164,16 +136,19 @@ ArenaSensorReading query_arena_occulus(
         if (!ship.alive) continue;
         bool is_friend = (i < ctx.ship_teams.size() &&
                           ctx.ship_teams[i] == ctx.self_team);
-        update_closest(check_overlap(ship.x, ship.y, Triangle::SIZE),
-                       is_friend ? ArenaHitType::FriendlyShip
-                                 : ArenaHitType::EnemyShip);
+        update_closest(
+            ellipse_overlap_distance(shape, ctx.ship_x, ctx.ship_y,
+                                      ship.x, ship.y, Triangle::SIZE),
+            is_friend ? ArenaHitType::FriendlyShip : ArenaHitType::EnemyShip);
     }
 
     for (const auto& bullet : ctx.bullets) {
         if (!bullet.alive) continue;
         if (bullet.owner_index == static_cast<int>(ctx.self_index)) continue;
-        update_closest(check_overlap(bullet.x, bullet.y, BULLET_RADIUS),
-                       ArenaHitType::Bullet);
+        update_closest(
+            ellipse_overlap_distance(shape, ctx.ship_x, ctx.ship_y,
+                                      bullet.x, bullet.y, BULLET_RADIUS),
+            ArenaHitType::Bullet);
     }
 
     return {closest_dist, closest_type};

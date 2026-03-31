@@ -1,4 +1,5 @@
 #include <neuroflyer/arena_sensor.h>
+#include <neuroflyer/sensor_engine.h>
 #include <neuroflyer/ship_design.h>
 #include <gtest/gtest.h>
 #include <cmath>
@@ -300,4 +301,55 @@ TEST(ArenaSensorTest, OcculusDetectsBullet) {
     auto reading = nf::query_arena_sensor(sensor, ctx);
     EXPECT_LT(reading.distance, 1.0f);
     EXPECT_EQ(reading.entity_type, nf::ArenaHitType::Bullet);
+}
+
+// --- ellipse_overlap_distance() unit tests (CONS-003/ARCH-005) ---
+
+TEST(SensorEngineTest, EllipseOverlapHitInsideEllipse) {
+    nf::SensorShape shape;
+    shape.center_x = 500.0f;
+    shape.center_y = 385.0f;
+    shape.major_radius = 100.0f;
+    shape.minor_radius = 57.5f;
+    shape.rotation = 0.0f;
+
+    float d = nf::ellipse_overlap_distance(shape, 500.0f, 500.0f,
+                                            500.0f, 385.0f, 10.0f);
+    EXPECT_GE(d, 0.0f);
+    EXPECT_LT(d, 1.0f);
+}
+
+TEST(SensorEngineTest, EllipseOverlapMissOutsideEllipse) {
+    nf::SensorShape shape;
+    shape.center_x = 500.0f;
+    shape.center_y = 385.0f;
+    shape.major_radius = 100.0f;
+    shape.minor_radius = 57.5f;
+    shape.rotation = 0.0f;
+
+    float d = nf::ellipse_overlap_distance(shape, 500.0f, 500.0f,
+                                            800.0f, 385.0f, 10.0f);
+    EXPECT_LT(d, 0.0f);
+}
+
+TEST(SensorEngineTest, EllipseOverlapDistanceIncreasesWithRange) {
+    // rotation=0 means major axis is horizontal (x direction).
+    // Place two objects along the major axis at different x offsets from center
+    // so both are inside the ellipse but at different distances from the ship.
+    nf::SensorShape shape;
+    shape.center_x = 500.0f;
+    shape.center_y = 385.0f;
+    shape.major_radius = 100.0f;
+    shape.minor_radius = 57.5f;
+    shape.rotation = 0.0f;
+
+    // Near: at ellipse center — distance from ship (500,500) ~= 115 units
+    float d_near = nf::ellipse_overlap_distance(shape, 500.0f, 500.0f,
+                                                 500.0f, 385.0f, 10.0f);
+    // Far: shifted 80 units right along major axis — distance from ship ~= 140 units
+    float d_far = nf::ellipse_overlap_distance(shape, 500.0f, 500.0f,
+                                                580.0f, 385.0f, 10.0f);
+    ASSERT_GE(d_near, 0.0f);
+    ASSERT_GE(d_far, 0.0f);
+    EXPECT_LT(d_near, d_far);
 }

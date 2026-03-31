@@ -81,41 +81,13 @@ SensorReading query_occulus(const SensorDef& sensor,
                             const std::vector<Token>& tokens) {
     auto shape = compute_sensor_shape(sensor, ship_x, ship_y);
 
-    float cx = shape.center_x;
-    float cy = shape.center_y;
-    float major_radius = shape.major_radius;
-    float minor_radius = std::max(shape.minor_radius, 0.01f);
-    float cos_a = std::cos(shape.rotation);
-    float sin_a = std::sin(shape.rotation);
-
     float closest_dist = 1.0f;
     HitType closest_type = HitType::Nothing;
 
-    auto check_overlap = [&](float ox, float oy, float obj_r) -> float {
-        float ddx = ox - cx;
-        float ddy = oy - cy;
-        float lmaj = ddx * cos_a + ddy * sin_a;
-        float lmin = -ddx * sin_a + ddy * cos_a;
-        float eff_maj = major_radius + obj_r;
-        float eff_min = minor_radius + obj_r;
-        float val = (lmaj * lmaj) / (eff_maj * eff_maj) +
-                    (lmin * lmin) / (eff_min * eff_min);
-        if (val <= 1.0f) {
-            float obj_dx = ox - ship_x;
-            float obj_dy = oy - ship_y;
-            float center_dist = std::sqrt(obj_dx * obj_dx + obj_dy * obj_dy);
-            float edge_dist = std::max(0.0f, center_dist - obj_r);
-            // max_reach = farthest point of ellipse from ship
-            // center is at (SHIP_SENSOR_GAP + major_r) from ship, extends major_r further
-            float max_reach = SHIP_SENSOR_GAP + major_radius * 2.0f;
-            return std::min(edge_dist / max_reach, 1.0f);
-        }
-        return -1.0f;
-    };
-
     for (const auto& tower : towers) {
         if (!tower.alive) continue;
-        float d = check_overlap(tower.x, tower.y, tower.radius);
+        float d = ellipse_overlap_distance(shape, ship_x, ship_y,
+                                            tower.x, tower.y, tower.radius);
         if (d >= 0.0f && d < closest_dist) {
             closest_dist = d;
             closest_type = HitType::Tower;
@@ -124,7 +96,8 @@ SensorReading query_occulus(const SensorDef& sensor,
 
     for (const auto& token : tokens) {
         if (!token.alive) continue;
-        float d = check_overlap(token.x, token.y, token.radius);
+        float d = ellipse_overlap_distance(shape, ship_x, ship_y,
+                                            token.x, token.y, token.radius);
         if (d >= 0.0f && d < closest_dist) {
             closest_dist = d;
             closest_type = HitType::Token;
@@ -135,6 +108,33 @@ SensorReading query_occulus(const SensorDef& sensor,
 }
 
 } // namespace
+
+float ellipse_overlap_distance(
+    const SensorShape& shape,
+    float ship_x, float ship_y,
+    float obj_x, float obj_y, float obj_radius) {
+    float cos_r = std::cos(shape.rotation);
+    float sin_r = std::sin(shape.rotation);
+    float minor_radius = std::max(shape.minor_radius, 0.01f);
+
+    float ddx = obj_x - shape.center_x;
+    float ddy = obj_y - shape.center_y;
+    float lmaj = ddx * cos_r + ddy * sin_r;
+    float lmin = -ddx * sin_r + ddy * cos_r;
+    float eff_maj = shape.major_radius + obj_radius;
+    float eff_min = minor_radius + obj_radius;
+    float val = (lmaj * lmaj) / (eff_maj * eff_maj) +
+                (lmin * lmin) / (eff_min * eff_min);
+    if (val <= 1.0f) {
+        float obj_dx = obj_x - ship_x;
+        float obj_dy = obj_y - ship_y;
+        float center_dist = std::sqrt(obj_dx * obj_dx + obj_dy * obj_dy);
+        float edge_dist = std::max(0.0f, center_dist - obj_radius);
+        float max_reach = SHIP_SENSOR_GAP + shape.major_radius * 2.0f;
+        return std::min(edge_dist / max_reach, 1.0f);
+    }
+    return -1.0f;
+}
 
 SensorReading query_sensor(const SensorDef& sensor,
                            float ship_x, float ship_y,

@@ -25,6 +25,14 @@ struct SensorShape {
     float rotation = 0;                 // radians
 };
 
+/// Test whether a circular object overlaps a sensor ellipse.
+/// Returns normalized distance [0,1] if inside the inflated ellipse, or -1.0 if outside.
+/// The ship position is needed for distance normalization (distance from ship to object edge).
+[[nodiscard]] float ellipse_overlap_distance(
+    const SensorShape& shape,
+    float ship_x, float ship_y,
+    float obj_x, float obj_y, float obj_radius);
+
 /// Compute the geometric shape of an Occulus sensor given ship position.
 /// For Raycast sensors, returns zero shape (raycasts are lines, not ellipses).
 [[nodiscard]] SensorShape compute_sensor_shape(
