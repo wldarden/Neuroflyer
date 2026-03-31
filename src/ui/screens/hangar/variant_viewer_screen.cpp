@@ -5,6 +5,7 @@
 #include <neuroflyer/ui/screens/fly_session_screen.h>
 #include <neuroflyer/ui/screens/lineage_tree_screen.h>
 #include <neuroflyer/ui/ui_manager.h>
+#include <neuroflyer/ui/ui_widget.h>
 
 #include <neuroflyer/ui/modals/confirm_modal.h>
 #include <neuroflyer/ui/modals/fighter_pairing_modal.h>
@@ -411,8 +412,8 @@ VariantViewerScreen::Action VariantViewerScreen::draw_variant_list(
             std::cerr << "Failed to list variants: " << e.what() << "\n";
             vs_.variants.clear();
         }
-        vs_.selected_idx = std::clamp(vs_.selected_idx, 0,
-            std::max(0, static_cast<int>(vs_.variants.size()) - 1));
+        vs_.selected_idx = std::clamp(vs_.selected_idx, -1,
+            std::max(-1, static_cast<int>(vs_.variants.size()) - 1));
 
         // Also refresh squad variants
         try {
@@ -467,12 +468,80 @@ VariantViewerScreen::Action VariantViewerScreen::draw_variant_list(
     draw_tab_bar();
 
     if (active_tab_ == NetTypeTab::Fighters) {
+        auto is_visible = [](FilterMode mode, NetType nt) -> bool {
+            return mode == FilterMode::All ||
+                   (mode == FilterMode::SoloOnly  && nt == NetType::Solo) ||
+                   (mode == FilterMode::SquadOnly && nt == NetType::Fighter);
+        };
+
+        // ---- Filter toggle: All | Solo | Squad ----
+        {
+            constexpr float FILTER_BTN_W = 60.0f;
+
+            struct FilterBtn { const char* label; FilterMode mode; };
+            constexpr FilterBtn FILTER_BTNS[] = {
+                {"All",   FilterMode::All},
+                {"Solo",  FilterMode::SoloOnly},
+                {"Squad", FilterMode::SquadOnly},
+            };
+
+            for (const auto& fb : FILTER_BTNS) {
+                bool is_active = (fighter_filter_ == fb.mode);
+                if (ui::button(fb.label,
+                        is_active ? ui::ButtonStyle::Primary
+                                  : ui::ButtonStyle::Secondary,
+                        FILTER_BTN_W)) {
+                    if (!is_active) {
+                        fighter_filter_ = fb.mode;
+                        // Reset selection if current selection is no longer visible
+                        if (!vs_.variants.empty() && vs_.selected_idx >= 0 &&
+                            static_cast<std::size_t>(vs_.selected_idx) <
+                                vs_.variants.size()) {
+                            const auto& sel = vs_.variants[
+                                static_cast<std::size_t>(vs_.selected_idx)];
+                            if (!is_visible(fb.mode, sel.net_type)) {
+                                vs_.selected_idx = -1;
+                                for (int i = 0;
+                                     i < static_cast<int>(vs_.variants.size());
+                                     ++i) {
+                                    const auto& v = vs_.variants[
+                                        static_cast<std::size_t>(i)];
+                                    if (is_visible(fb.mode, v.net_type)) {
+                                        vs_.selected_idx = i;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                ImGui::SameLine();
+            }
+            ImGui::NewLine();
+            ImGui::Dummy(ImVec2(0, 4));
+        }
+
         // ---- Fighter variant table ----
         if (vs_.variants.empty()) {
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
                 "(no variants found)");
         } else {
-            if (ImGui::BeginTable("##VarTable", 5,
+            // Build filtered index list
+            std::vector<int> filtered_indices;
+            filtered_indices.reserve(vs_.variants.size());
+            for (int i = 0;
+                 i < static_cast<int>(vs_.variants.size()); ++i) {
+                const auto& v =
+                    vs_.variants[static_cast<std::size_t>(i)];
+                if (is_visible(fighter_filter_, v.net_type)) {
+                    filtered_indices.push_back(i);
+                }
+            }
+
+            if (filtered_indices.empty()) {
+                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
+                    "(no variants match filter)");
+            } else if (ImGui::BeginTable("##VarTable", 5,
                     ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg |
                     ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp,
                     ImVec2(0, content_h - 100.0f))) {
@@ -489,13 +558,26 @@ VariantViewerScreen::Action VariantViewerScreen::draw_variant_list(
                     ImGuiTableColumnFlags_None, 0.32f);
                 ImGui::TableHeadersRow();
 
-                for (int i = 0;
-                     i < static_cast<int>(vs_.variants.size()); ++i) {
+                for (const int i : filtered_indices) {
                     const auto& v =
                         vs_.variants[static_cast<std::size_t>(i)];
                     ImGui::TableNextRow();
 
                     ImGui::TableNextColumn();
+
+                    // Type badge
+                    if (v.net_type == NetType::Fighter) {
+                        ImGui::TextColored(
+                            ImVec4(0.64f, 0.61f, 0.99f, 1.0f), "[SQUAD]");
+                    } else if (v.net_type == NetType::Solo) {
+                        ImGui::TextColored(
+                            ImVec4(0.0f, 0.82f, 0.83f, 1.0f), "[SOLO]");
+                    } else {
+                        ImGui::TextColored(
+                            ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "[?]");
+                    }
+                    ImGui::SameLine();
+
                     bool is_selected = (vs_.selected_idx == i);
                     if (ImGui::Selectable(v.name.c_str(), is_selected,
                             ImGuiSelectableFlags_SpanAllColumns)) {
@@ -968,6 +1050,7 @@ void VariantViewerScreen::on_draw(
         squad_variants_.clear();
         squad_selected_idx_ = 0;
         paired_fighter_name_.clear();
+        fighter_filter_ = FilterMode::All;
     }
 
     // Ensure lineage graph rebuilds with cross-genome info
