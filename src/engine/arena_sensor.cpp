@@ -1,5 +1,6 @@
 #include <neuroflyer/arena_config.h>
 #include <neuroflyer/arena_sensor.h>
+#include <neuroflyer/collision.h>
 #include <neuroflyer/sensor_engine.h>
 
 #include <algorithm>
@@ -16,21 +17,10 @@ namespace {
 /// is at (ox+dx, oy+dy). range is the actual ray length for normalization.
 float ray_circle_hit(float ox, float oy, float dx, float dy, float range,
                      float cx, float cy, float cr) {
-    if (range < 1e-6f) return 1.0f;  // guard against division by zero
-    // Use f = O - C (same convention as collision.h ray_circle_intersect)
-    float fx = ox - cx;
-    float fy = oy - cy;
-    float a = dx * dx + dy * dy;
-    if (a < 1e-12f) return 1.0f;
-    float b = 2.0f * (fx * dx + fy * dy);
-    float c_val = fx * fx + fy * fy - cr * cr;
-    float disc = b * b - 4.0f * a * c_val;
-    if (disc < 0.0f) return 1.0f;
-    float sqrt_disc = std::sqrt(disc);
-    float t = (-b - sqrt_disc) / (2.0f * a);
-    if (t < 0.0f) t = (-b + sqrt_disc) / (2.0f * a);
+    if (range < 1e-6f) return 1.0f;
+    float t = ray_circle_intersect(ox, oy, dx, dy, cx, cy, cr);
     if (t < 0.0f || t > 1.0f) return 1.0f;
-    float dist = t * std::sqrt(a);
+    float dist = t * std::sqrt(dx * dx + dy * dy);
     return std::min(dist / range, 1.0f);
 }
 
@@ -155,6 +145,31 @@ ArenaSensorReading query_arena_occulus(
 }
 
 } // namespace
+
+ArenaQueryContext ArenaQueryContext::for_ship(
+    const Triangle& ship, std::size_t index, int team,
+    float world_w, float world_h,
+    std::span<const Tower> towers,
+    std::span<const Token> tokens,
+    std::span<const Triangle> ships,
+    std::span<const int> ship_teams,
+    std::span<const Bullet> bullets) {
+
+    ArenaQueryContext ctx;
+    ctx.ship_x = ship.x;
+    ctx.ship_y = ship.y;
+    ctx.ship_rotation = ship.rotation;
+    ctx.world_w = world_w;
+    ctx.world_h = world_h;
+    ctx.self_index = index;
+    ctx.self_team = team;
+    ctx.towers = towers;
+    ctx.tokens = tokens;
+    ctx.ships = ships;
+    ctx.ship_teams = ship_teams;
+    ctx.bullets = bullets;
+    return ctx;
+}
 
 ArenaSensorReading query_arena_sensor(
     const SensorDef& sensor,

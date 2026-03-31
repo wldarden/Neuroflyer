@@ -305,6 +305,42 @@ TEST(ArenaSensorTest, OcculusDetectsBullet) {
 
 // --- ellipse_overlap_distance() unit tests (CONS-003/ARCH-005) ---
 
+TEST(ArenaSensorTest, RaycastNormalizedDistance) {
+    // A ship at 500,500 facing up with range=200.
+    // An enemy at 500,400 (100px away) should have distance ~0.5.
+    nf::SensorDef sensor;
+    sensor.type = nf::SensorType::Raycast;
+    sensor.angle = 0.0f;
+    sensor.range = 200.0f;
+    sensor.width = 0.0f;
+    sensor.is_full_sensor = true;
+    sensor.id = 1;
+
+    nf::ArenaQueryContext ctx;
+    ctx.ship_x = 500.0f;
+    ctx.ship_y = 500.0f;
+    ctx.ship_rotation = 0.0f;
+    ctx.self_index = 0;
+    ctx.self_team = 0;
+
+    std::vector<nf::Triangle> ships = {
+        nf::Triangle(500.0f, 500.0f),
+        nf::Triangle(500.0f, 400.0f),
+    };
+    std::vector<int> ship_teams = {0, 1};
+    ctx.ships = ships;
+    ctx.ship_teams = ship_teams;
+
+    auto reading = nf::query_arena_sensor(sensor, ctx);
+    // Ship center is ~100px away, but hit circle radius is Triangle::SIZE * 0.8.
+    // The distance should be roughly (100 - hit_r) / 200.
+    EXPECT_GT(reading.distance, 0.2f);
+    EXPECT_LT(reading.distance, 0.6f);
+    EXPECT_EQ(reading.entity_type, nf::ArenaHitType::EnemyShip);
+}
+
+// --- ellipse_overlap_distance() unit tests (CONS-003/ARCH-005) ---
+
 TEST(SensorEngineTest, EllipseOverlapHitInsideEllipse) {
     nf::SensorShape shape;
     shape.center_x = 500.0f;
@@ -353,3 +389,4 @@ TEST(SensorEngineTest, EllipseOverlapDistanceIncreasesWithRange) {
     ASSERT_GE(d_far, 0.0f);
     EXPECT_LT(d_near, d_far);
 }
+
