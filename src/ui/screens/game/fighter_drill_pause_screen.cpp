@@ -279,7 +279,7 @@ void FighterDrillPauseScreen::on_draw(AppState& state, Renderer& renderer,
                                 .count();
 
                         try {
-                            save_squad_variant(genome_dir_, snap);
+                            save_variant(genome_dir_, snap);
                             ++saved;
                         } catch (const std::exception& e) {
                             std::cerr << "Failed to save variant: "
@@ -290,7 +290,7 @@ void FighterDrillPauseScreen::on_draw(AppState& state, Renderer& renderer,
 
                     std::cout << "Saved " << saved
                               << " fighter drill variants to "
-                              << genome_dir_ << "/squad/\n";
+                              << genome_dir_ << "/\n";
                     state.variants_dirty = true;
                 },
                 "drill-g" + std::to_string(generation_)));
