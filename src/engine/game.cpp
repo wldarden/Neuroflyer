@@ -6,11 +6,14 @@
 
 namespace neuroflyer {
 
+// Ships move backwards at half their forward speed.
+static constexpr float REVERSE_SCALE = 0.5f;
+
 void Triangle::apply_actions(bool up, bool down, bool left, bool right, bool shoot) {
     dx = 0.0f;
     dy = 0.0f;
     if (up) dy -= speed;
-    if (down) dy += speed;
+    if (down) dy += speed * REVERSE_SCALE;
     if (left) dx -= speed;
     if (right) dx += speed;
     wants_shoot = shoot;
@@ -28,8 +31,8 @@ void Triangle::apply_arena_actions(bool up, bool down, bool left, bool right,
     float fx = std::sin(rotation);   // X component of facing direction
     float fy = -std::cos(rotation);  // Y component (negative = up in screen coords)
 
-    if (up)   { dx += fx * speed; dy += fy * speed; }
-    if (down) { dx -= fx * speed; dy -= fy * speed; }
+    if (up)   { dx += fx * speed;               dy += fy * speed; }
+    if (down) { dx -= fx * speed * REVERSE_SCALE; dy -= fy * speed * REVERSE_SCALE; }
 
     wants_shoot = shoot;
 }
