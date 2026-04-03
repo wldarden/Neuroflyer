@@ -34,7 +34,7 @@ struct FighterDrillConfig {
     bool wrap_ew = true;
 
     // Phase timing
-    uint32_t phase_duration_ticks = 20 * 60;  // 20 seconds at 60fps
+    uint32_t phase_duration_ticks = 10 * 60;  // 10 seconds at 60fps
 
     // Scoring weights
     float expand_weight = 1.0f;
