@@ -3,6 +3,7 @@
 #include <neuroflyer/ui/screens/arena_config_screen.h>
 #include <neuroflyer/ui/screens/attack_run_screen.h>
 #include <neuroflyer/ui/screens/fighter_drill_screen.h>
+#include <neuroflyer/ui/screens/skirmish_screen.h>
 #include <neuroflyer/ui/screens/fly_session_screen.h>
 #include <neuroflyer/ui/screens/lineage_tree_screen.h>
 #include <neuroflyer/ui/ui_manager.h>
@@ -335,6 +336,10 @@ VariantViewerScreen::Action VariantViewerScreen::draw_squad_actions(
     ImGui::Dummy(ImVec2(0, 3));
     if (ImGui::Button("Base Attack", ImVec2(BTN_W, BTN_H))) {
         action = Action::SquadTrainBaseAttack;
+    }
+    ImGui::Dummy(ImVec2(0, 3));
+    if (ImGui::Button("Squad Skirmish", ImVec2(BTN_W, BTN_H))) {
+        action = Action::SquadSkirmish;
     }
     ImGui::Dummy(ImVec2(0, 3));
     ImGui::BeginDisabled();
@@ -1442,6 +1447,35 @@ void VariantViewerScreen::on_draw(
                         squad_delete_name_ = del_name;
                         squad_delete_pending_ = true;
                     }));
+            }
+            break;
+        }
+
+        case Action::SquadSkirmish: {
+            if (paired_fighter_name_.empty()) {
+                ui.push_modal(std::make_unique<FighterPairingModal>(
+                    vs_.variants,
+                    [this](const std::string& name) {
+                        paired_fighter_name_ = name;
+                    }));
+            } else if (!squad_variants_.empty() && squad_selected_idx_ >= 0 &&
+                       static_cast<std::size_t>(squad_selected_idx_) < squad_variants_.size()) {
+                const auto& sel_sq = squad_variants_[
+                    static_cast<std::size_t>(squad_selected_idx_)];
+                try {
+                    auto squad_snap = load_snapshot(squad_variant_path(sel_sq));
+                    std::string fighter_path = vs_.genome_dir + "/" + paired_fighter_name_ + ".bin";
+                    if (!std::filesystem::exists(fighter_path)) {
+                        fighter_path = vs_.genome_dir + "/genome.bin";
+                    }
+                    auto fighter_snap = load_snapshot(fighter_path);
+                    state.return_to_variant_view = true;
+                    ui.push_screen(std::make_unique<SkirmishScreen>(
+                        std::move(squad_snap), std::move(fighter_snap),
+                        vs_.genome_dir, sel_sq.name));
+                } catch (const std::exception& e) {
+                    std::cerr << "SquadSkirmish failed: " << e.what() << "\n";
+                }
             }
             break;
         }

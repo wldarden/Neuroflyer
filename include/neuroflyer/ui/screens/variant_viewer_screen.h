@@ -81,7 +81,7 @@ private:
         LineageTree,
         // Squad actions
         SquadTrainVsSquad, SquadTrainBaseAttack, SquadChangeFighter,
-        SquadViewNet, SquadDelete
+        SquadViewNet, SquadDelete, SquadSkirmish
     };
 
     // Internal draw helpers
