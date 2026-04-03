@@ -29,10 +29,12 @@ struct SkirmishConfig {
     float bullet_max_range = 1000.0f;
     bool wrap_ns = true;
     bool wrap_ew = true;
+    bool friendly_fire = false;  // when false, bullets pass through teammate ships
     float sector_size = 2000.0f;
     int ntm_sector_radius = 2;
     float kill_points = 100.0f;
     float death_points = 20.0f;
+    float base_hit_points = 10.0f;  // per bullet hit on enemy base (kill_points / 10)
 
     /// Points awarded for destroying an enemy base: kill_points * total fighters per team.
     [[nodiscard]] float base_kill_points() const noexcept {
@@ -59,6 +61,7 @@ struct SkirmishConfig {
         ac.bullet_max_range = bullet_max_range;
         ac.wrap_ns = wrap_ns;
         ac.wrap_ew = wrap_ew;
+        ac.friendly_fire = friendly_fire;
         ac.sector_size = sector_size;
         ac.ntm_sector_radius = ntm_sector_radius;
         ac.rounds_per_generation = 1;
