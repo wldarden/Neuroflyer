@@ -20,6 +20,7 @@ add_executable(neuroflyer_tests
     sector_grid_test.cpp
     squad_leader_test.cpp
     fighter_drill_session_test.cpp
+    attack_run_session_test.cpp
     ../src/engine/game.cpp
     ../src/engine/arena_session.cpp
     ../src/engine/ray.cpp
