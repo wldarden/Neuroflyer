@@ -1,4 +1,5 @@
 #include <neuroflyer/ui/screens/skirmish_screen.h>
+#include <neuroflyer/ui/screens/skirmish_pause_screen.h>
 #include <neuroflyer/ui/ui_manager.h>
 
 #include <neuroflyer/app_state.h>
@@ -89,8 +90,7 @@ void draw_circle_outline(SDL_Renderer* renderer,
 const char* camera_mode_str(int mode) {
     switch (mode) {
     case 0: return "SWARM";
-    case 1: return "BEST";
-    case 2: return "WORST";
+    case 1: return "FOLLOW";
     }
     return "?";
 }
@@ -102,11 +102,13 @@ const char* camera_mode_str(int mode) {
 SkirmishScreen::SkirmishScreen(Snapshot squad_snapshot,
                                Snapshot fighter_snapshot,
                                std::string genome_dir,
-                               std::string variant_name)
+                               std::string variant_name,
+                               SkirmishConfig config)
     : squad_snapshot_(std::move(squad_snapshot))
     , fighter_snapshot_(std::move(fighter_snapshot))
     , genome_dir_(std::move(genome_dir))
-    , variant_name_(std::move(variant_name)) {}
+    , variant_name_(std::move(variant_name))
+    , config_(std::move(config)) {}
 
 SkirmishScreen::~SkirmishScreen() {
     destroy_net_viewer_view(net_viewer_state_);
@@ -172,22 +174,61 @@ void SkirmishScreen::initialize(AppState& state) {
 // ==================== Input handling ====================
 
 bool SkirmishScreen::handle_input(UIManager& ui) {
-    // Tab: cycle camera mode
+    // Tab: cycle through fighters (Swarm → first alive → next alive → ... → Swarm)
     if (ImGui::IsKeyPressed(ImGuiKey_Tab)) {
-        switch (camera_mode_) {
-        case CameraMode::Swarm:  camera_mode_ = CameraMode::Best;  break;
-        case CameraMode::Best:   camera_mode_ = CameraMode::Worst; break;
-        case CameraMode::Worst:  camera_mode_ = CameraMode::Swarm; break;
+        const auto* arena = tournament_ ? tournament_->current_arena() : nullptr;
+        if (arena && !arena->ships().empty()) {
+            const auto& ships = arena->ships();
+            int total = static_cast<int>(ships.size());
+            if (camera_mode_ == CameraMode::Swarm) {
+                // Enter follow mode: find first alive ship
+                for (int i = 0; i < total; ++i) {
+                    if (ships[static_cast<std::size_t>(i)].alive) {
+                        selected_ship_ = i;
+                        camera_mode_ = CameraMode::Follow;
+                        break;
+                    }
+                }
+            } else {
+                // Cycle to next alive ship, wrap to Swarm after last
+                int start = selected_ship_ + 1;
+                bool found = false;
+                for (int i = 0; i < total; ++i) {
+                    int idx = (start + i) % total;
+                    if (ships[static_cast<std::size_t>(idx)].alive) {
+                        selected_ship_ = idx;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    camera_mode_ = CameraMode::Swarm;
+                    selected_ship_ = -1;
+                }
+            }
         }
+    }
+
+    // F: toggle fighter/squad leader net view in follow mode
+    if (ImGui::IsKeyPressed(ImGuiKey_F) && camera_mode_ == CameraMode::Follow) {
+        follow_net_view_ = (follow_net_view_ == FollowNetView::Fighter)
+            ? FollowNetView::SquadLeader : FollowNetView::Fighter;
+    }
+
+    // Escape from follow → swarm first
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape) && camera_mode_ == CameraMode::Follow) {
+        camera_mode_ = CameraMode::Swarm;
+        selected_ship_ = -1;
+        return false;  // don't exit screen
     }
 
     // Arrow keys: free camera
     const Uint8* keys = SDL_GetKeyboardState(nullptr);
     float pan = Camera::PAN_SPEED / camera_.zoom;
-    if (keys[SDL_SCANCODE_LEFT])  { camera_.x -= pan; camera_mode_ = CameraMode::Swarm; }
-    if (keys[SDL_SCANCODE_RIGHT]) { camera_.x += pan; camera_mode_ = CameraMode::Swarm; }
-    if (keys[SDL_SCANCODE_UP])    { camera_.y -= pan; camera_mode_ = CameraMode::Swarm; }
-    if (keys[SDL_SCANCODE_DOWN])  { camera_.y += pan; camera_mode_ = CameraMode::Swarm; }
+    if (keys[SDL_SCANCODE_LEFT])  { camera_.x -= pan; camera_mode_ = CameraMode::Swarm; selected_ship_ = -1; }
+    if (keys[SDL_SCANCODE_RIGHT]) { camera_.x += pan; camera_mode_ = CameraMode::Swarm; selected_ship_ = -1; }
+    if (keys[SDL_SCANCODE_UP])    { camera_.y -= pan; camera_mode_ = CameraMode::Swarm; selected_ship_ = -1; }
+    if (keys[SDL_SCANCODE_DOWN])  { camera_.y += pan; camera_mode_ = CameraMode::Swarm; selected_ship_ = -1; }
 
     // Mouse scroll: zoom
     float wheel = ImGui::GetIO().MouseWheel;
@@ -209,9 +250,16 @@ bool SkirmishScreen::handle_input(UIManager& ui) {
     if (keys[SDL_SCANCODE_3]) ticks_per_frame_ = 20;
     if (keys[SDL_SCANCODE_4]) ticks_per_frame_ = 100;
 
-    // Space: toggle pause (inline overlay)
+    // Space: open pause screen
     if (ImGui::IsKeyPressed(ImGuiKey_Space)) {
-        paused_ = !paused_;
+        paused_ = true;
+        ui.push_screen(std::make_unique<SkirmishPauseScreen>(
+            population_, generation_, ship_design_,
+            genome_dir_, variant_name_, evo_config_,
+            [this](const EvolutionConfig& updated_config) {
+                evo_config_ = updated_config;
+                paused_ = false;
+            }));
     }
 
     // Escape: exit
@@ -302,45 +350,29 @@ void SkirmishScreen::render_world(Renderer& renderer) {
             }
             break;
         }
-        case CameraMode::Best: {
-            float best_score = -std::numeric_limits<float>::max();
-            int best_idx = 0;
-            auto scores = arena->get_scores();
-            for (std::size_t i = 0; i < ships.size(); ++i) {
-                if (!ships[i].alive) continue;
-                float s = (i < scores.size()) ? scores[i] : 0.0f;
-                if (s > best_score) {
-                    best_score = s;
-                    best_idx = static_cast<int>(i);
+        case CameraMode::Follow: {
+            // If selected ship died, find next alive
+            if (selected_ship_ >= 0 &&
+                static_cast<std::size_t>(selected_ship_) < ships.size() &&
+                !ships[static_cast<std::size_t>(selected_ship_)].alive) {
+                bool found = false;
+                for (std::size_t i = 0; i < ships.size(); ++i) {
+                    if (ships[i].alive) {
+                        selected_ship_ = static_cast<int>(i);
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    camera_mode_ = CameraMode::Swarm;
+                    selected_ship_ = -1;
                 }
             }
-            selected_ship_ = best_idx;
-            if (best_idx >= 0 &&
-                static_cast<std::size_t>(best_idx) < ships.size() &&
-                ships[static_cast<std::size_t>(best_idx)].alive) {
-                camera_.x = ships[static_cast<std::size_t>(best_idx)].x;
-                camera_.y = ships[static_cast<std::size_t>(best_idx)].y;
-            }
-            break;
-        }
-        case CameraMode::Worst: {
-            float worst_score = std::numeric_limits<float>::max();
-            int worst_idx = 0;
-            auto scores = arena->get_scores();
-            for (std::size_t i = 0; i < ships.size(); ++i) {
-                if (!ships[i].alive) continue;
-                float s = (i < scores.size()) ? scores[i] : 0.0f;
-                if (s < worst_score) {
-                    worst_score = s;
-                    worst_idx = static_cast<int>(i);
-                }
-            }
-            selected_ship_ = worst_idx;
-            if (worst_idx >= 0 &&
-                static_cast<std::size_t>(worst_idx) < ships.size() &&
-                ships[static_cast<std::size_t>(worst_idx)].alive) {
-                camera_.x = ships[static_cast<std::size_t>(worst_idx)].x;
-                camera_.y = ships[static_cast<std::size_t>(worst_idx)].y;
+            if (selected_ship_ >= 0 &&
+                static_cast<std::size_t>(selected_ship_) < ships.size() &&
+                ships[static_cast<std::size_t>(selected_ship_)].alive) {
+                camera_.x = ships[static_cast<std::size_t>(selected_ship_)].x;
+                camera_.y = ships[static_cast<std::size_t>(selected_ship_)].y;
             }
             break;
         }
@@ -498,112 +530,173 @@ void SkirmishScreen::render_hud(Renderer& renderer) {
     int info_x = game_panel_w + 10;
     int info_w = renderer.net_w() - 20;
 
-    // Full info panel (no net viewer in skirmish since it is team-level)
-    ImGui::SetNextWindowPos(ImVec2(static_cast<float>(info_x), 10.0f),
-                            ImGuiCond_Always);
-    ImGui::SetNextWindowSize(
-        ImVec2(static_cast<float>(info_w),
-               static_cast<float>(game_panel_h - 20)),
-        ImGuiCond_Always);
-    ImGui::Begin("##SkirmishInfo", nullptr,
-        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
-
-    ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "SQUAD SKIRMISH");
-    ImGui::Separator();
-
-    ImGui::Text("Generation:  %zu", generation_);
-
-    // Tournament progress
-    if (tournament_) {
-        ImGui::Text("Round:       %zu / %zu",
-                    tournament_->current_round() + 1,
-                    tournament_->total_rounds());
-        ImGui::Text("Match:       %zu / %zu",
-                    tournament_->current_match() + 1,
-                    tournament_->matches_in_round());
-        ImGui::Text("Seed:        %zu / %zu",
-                    tournament_->current_seed() + 1,
-                    tournament_->seeds_for_current_round());
-
-        auto [a_idx, b_idx] = tournament_->current_matchup();
-        ImGui::Text("Matchup:     Var %zu vs Var %zu", a_idx, b_idx);
-    }
-
-    ImGui::Text("Speed:       %dx", ticks_per_frame_);
-    ImGui::Text("Camera:      %s", camera_mode_str(static_cast<int>(camera_mode_)));
-
-    // Alive count from current arena
     const ArenaSession* arena = tournament_ ? tournament_->current_arena() : nullptr;
-    if (arena) {
-        int alive = 0;
-        for (const auto& s : arena->ships()) if (s.alive) ++alive;
-        ImGui::Text("Alive:       %d / %zu", alive, arena->ships().size());
-        ImGui::Text("Tick:        %u", arena->current_tick());
-    }
 
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
+    // Determine follow mode
+    bool in_follow = (camera_mode_ == CameraMode::Follow &&
+        selected_ship_ >= 0 && arena &&
+        static_cast<std::size_t>(selected_ship_) < arena->ships().size() &&
+        arena->ships()[static_cast<std::size_t>(selected_ship_)].alive);
 
-    // Leaderboard
-    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Leaderboard");
-    if (tournament_) {
-        const auto& scores = tournament_->variant_scores();
-        std::vector<std::size_t> sorted_idx(scores.size());
-        for (std::size_t i = 0; i < sorted_idx.size(); ++i) sorted_idx[i] = i;
-        std::sort(sorted_idx.begin(), sorted_idx.end(),
-            [&](std::size_t a, std::size_t b) {
-                return scores[a] > scores[b];
-            });
+    if (in_follow) {
+        // ---- Follow mode: compact HUD + net viewer ----
 
-        for (std::size_t rank = 0; rank < std::min<std::size_t>(10, sorted_idx.size()); ++rank) {
-            std::size_t idx = sorted_idx[rank];
-            char label[64];
-            std::snprintf(label, sizeof(label), "#%zu: Var %zu  (%d pts)",
-                rank + 1, idx, static_cast<int>(scores[idx]));
-            ImGui::Text("%s", label);
-        }
-    }
+        // Determine which team this ship belongs to for net viewer
+        const auto& ship_teams = tournament_->current_ship_teams();
+        int ship_team = (selected_ship_ >= 0 && static_cast<std::size_t>(selected_ship_) < ship_teams.size())
+            ? ship_teams[static_cast<std::size_t>(selected_ship_)] : 0;
+        auto [matchup_a, matchup_b] = tournament_->current_matchup();
+        std::size_t variant_idx = (ship_team == 0) ? matchup_a : matchup_b;
 
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
-
-    // Pause overlay controls
-    if (paused_) {
-        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.3f, 1.0f), "** PAUSED **");
-        ImGui::Spacing();
-
-        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Evolution Settings");
-        ImGui::SliderFloat("Weight Mutation Rate",
-            &evo_config_.weight_mutation_rate, 0.0f, 1.0f);
-        ImGui::SliderFloat("Weight Mutation Strength",
-            &evo_config_.weight_mutation_strength, 0.0f, 2.0f);
-        ImGui::SliderFloat("Add Node Chance",
-            &evo_config_.add_node_chance, 0.0f, 0.1f);
-        int elite = static_cast<int>(evo_config_.elitism_count);
-        if (ImGui::SliderInt("Elitism Count", &elite, 0, 10)) {
-            evo_config_.elitism_count = static_cast<std::size_t>(elite);
+        // Set up net viewer for selected fighter or squad leader
+        auto team_idx = static_cast<std::size_t>(ship_team);
+        if (follow_net_view_ == FollowNetView::Fighter) {
+            net_viewer_state_.individual = &population_[variant_idx].fighter_individual;
+            net_viewer_state_.network = tournament_->fighter_net(team_idx);
+            net_viewer_state_.ship_design = ship_design_;
+            net_viewer_state_.net_type = NetType::Fighter;
+            net_viewer_state_.input_values = last_fighter_input_;
+        } else {
+            net_viewer_state_.individual = &population_[variant_idx].squad_individual;
+            net_viewer_state_.network = tournament_->leader_net(team_idx);
+            net_viewer_state_.ship_design = ship_design_;
+            net_viewer_state_.net_type = NetType::SquadLeader;
+            net_viewer_state_.input_values = last_leader_input_;
         }
 
+        // Compact HUD
+        ImGui::SetNextWindowPos(ImVec2(static_cast<float>(info_x), 10.0f),
+                                ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(static_cast<float>(info_w), 140.0f),
+                                 ImGuiCond_Always);
+        ImGui::Begin("##SkirmishHUD", nullptr,
+            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
+            ImGuiWindowFlags_NoScrollbar);
+
+        ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "SQUAD SKIRMISH");
+        ImGui::Text("Gen %zu  |  Ship #%d (Team %d, Var %zu)",
+                    generation_, selected_ship_, ship_team, variant_idx);
+        if (tournament_) {
+            ImGui::Text("Round %zu/%zu  Match %zu/%zu  Seed %zu/%zu",
+                        tournament_->current_round() + 1, tournament_->total_rounds(),
+                        tournament_->current_match() + 1, tournament_->matches_in_round(),
+                        tournament_->current_seed() + 1, tournament_->seeds_for_current_round());
+        }
+        ImGui::Text("Speed: %dx  |  Tab: next ship  |  F: toggle net",
+                    ticks_per_frame_);
+
+        // Fighter / Squad Leader toggle buttons
         ImGui::Spacing();
-        if (ImGui::Button("Resume", ImVec2(120, 30))) {
-            paused_ = false;
+        bool is_fighter = (follow_net_view_ == FollowNetView::Fighter);
+        if (is_fighter) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.4f, 0.6f, 1.0f));
+        if (ImGui::Button("Fighter", ImVec2(info_w / 2.0f - 8.0f, 0))) {
+            follow_net_view_ = FollowNetView::Fighter;
+        }
+        if (is_fighter) ImGui::PopStyleColor();
+        ImGui::SameLine();
+        bool is_leader = (follow_net_view_ == FollowNetView::SquadLeader);
+        if (is_leader) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5f, 0.4f, 0.2f, 1.0f));
+        if (ImGui::Button("Squad Leader", ImVec2(info_w / 2.0f - 8.0f, 0))) {
+            follow_net_view_ = FollowNetView::SquadLeader;
+        }
+        if (is_leader) ImGui::PopStyleColor();
+
+        ImGui::End();
+
+        // Net viewer below HUD
+        int net_y = 160;
+        net_viewer_state_.render_x = info_x;
+        net_viewer_state_.render_y = net_y;
+        net_viewer_state_.render_w = info_w;
+        net_viewer_state_.render_h = game_panel_h - net_y - 10;
+
+        draw_net_viewer_view(net_viewer_state_, renderer.renderer_);
+
+    } else {
+        // ---- Swarm mode: full info panel ----
+        ImGui::SetNextWindowPos(ImVec2(static_cast<float>(info_x), 10.0f),
+                                ImGuiCond_Always);
+        ImGui::SetNextWindowSize(
+            ImVec2(static_cast<float>(info_w),
+                   static_cast<float>(game_panel_h - 20)),
+            ImGuiCond_Always);
+        ImGui::Begin("##SkirmishInfo", nullptr,
+            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+
+        ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "SQUAD SKIRMISH");
+        ImGui::Separator();
+
+        ImGui::Text("Generation:  %zu", generation_);
+
+        if (tournament_) {
+            ImGui::Text("Round:       %zu / %zu",
+                        tournament_->current_round() + 1,
+                        tournament_->total_rounds());
+            ImGui::Text("Match:       %zu / %zu",
+                        tournament_->current_match() + 1,
+                        tournament_->matches_in_round());
+            ImGui::Text("Seed:        %zu / %zu",
+                        tournament_->current_seed() + 1,
+                        tournament_->seeds_for_current_round());
+
+            auto [a_idx, b_idx] = tournament_->current_matchup();
+            ImGui::Text("Matchup:     Var %zu vs Var %zu", a_idx, b_idx);
+        }
+
+        ImGui::Text("Speed:       %dx", ticks_per_frame_);
+        ImGui::Text("Camera:      %s", camera_mode_str(static_cast<int>(camera_mode_)));
+
+        if (arena) {
+            int alive = 0;
+            for (const auto& s : arena->ships()) if (s.alive) ++alive;
+            ImGui::Text("Alive:       %d / %zu", alive, arena->ships().size());
+            ImGui::Text("Tick:        %u", arena->current_tick());
         }
 
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
+
+        // Leaderboard
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Leaderboard");
+        if (tournament_) {
+            const auto& scores = tournament_->variant_scores();
+            std::vector<std::size_t> sorted_idx(scores.size());
+            for (std::size_t i = 0; i < sorted_idx.size(); ++i) sorted_idx[i] = i;
+            std::sort(sorted_idx.begin(), sorted_idx.end(),
+                [&](std::size_t a, std::size_t b) {
+                    return scores[a] > scores[b];
+                });
+
+            for (std::size_t rank = 0; rank < std::min<std::size_t>(10, sorted_idx.size()); ++rank) {
+                std::size_t idx = sorted_idx[rank];
+                char label[64];
+                std::snprintf(label, sizeof(label), "#%zu: Var %zu  (%d pts)",
+                    rank + 1, idx, static_cast<int>(scores[idx]));
+                ImGui::Text("%s", label);
+            }
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (paused_) {
+            ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.3f, 1.0f), "** PAUSED **");
+            ImGui::Spacing();
+        }
+
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Controls");
+        ImGui::Text("Tab:   Cycle fighters");
+        ImGui::Text("F:     Toggle Fighter/Squad net");
+        ImGui::Text("1-4:   Speed (1x/5x/20x/100x)");
+        ImGui::Text("Space: Pause");
+        ImGui::Text("Esc:   Back");
+
+        ImGui::End();
     }
-
-    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Controls");
-    ImGui::Text("Tab:   Cycle camera");
-    ImGui::Text("1-4:   Speed (1x/5x/20x/100x)");
-    ImGui::Text("Space: Pause");
-    ImGui::Text("Esc:   Exit");
-
-    ImGui::End();
 }
 
 // ==================== Main draw ====================

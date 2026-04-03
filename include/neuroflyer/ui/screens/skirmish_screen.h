@@ -21,7 +21,8 @@ public:
     SkirmishScreen(Snapshot squad_snapshot,
                    Snapshot fighter_snapshot,
                    std::string genome_dir,
-                   std::string variant_name);
+                   std::string variant_name,
+                   SkirmishConfig config);
     ~SkirmishScreen() override;
 
     void on_draw(AppState& state, Renderer& renderer, UIManager& ui) override;
@@ -48,17 +49,21 @@ private:
     std::vector<TeamIndividual> population_;
 
     Camera camera_;
-    enum class CameraMode { Swarm, Best, Worst };
+    enum class CameraMode { Swarm, Follow };
     CameraMode camera_mode_ = CameraMode::Swarm;
 
     bool initialized_ = false;
     bool paused_ = false;
     std::size_t generation_ = 1;
     int ticks_per_frame_ = 1;
-    int selected_ship_ = 0;
+    int selected_ship_ = -1;  // -1 = no selection
 
+    // Net viewer for follow mode
+    enum class FollowNetView { Fighter, SquadLeader };
+    FollowNetView follow_net_view_ = FollowNetView::Fighter;
     NetViewerViewState net_viewer_state_;
-    std::vector<float> last_input_;
+    std::vector<float> last_fighter_input_;
+    std::vector<float> last_leader_input_;
 
     std::mt19937 rng_;
 };

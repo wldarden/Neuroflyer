@@ -3,7 +3,7 @@
 #include <neuroflyer/ui/screens/arena_config_screen.h>
 #include <neuroflyer/ui/screens/attack_run_screen.h>
 #include <neuroflyer/ui/screens/fighter_drill_screen.h>
-#include <neuroflyer/ui/screens/skirmish_screen.h>
+#include <neuroflyer/ui/screens/skirmish_config_screen.h>
 #include <neuroflyer/ui/screens/fly_session_screen.h>
 #include <neuroflyer/ui/screens/lineage_tree_screen.h>
 #include <neuroflyer/ui/ui_manager.h>
@@ -1470,7 +1470,7 @@ void VariantViewerScreen::on_draw(
                     }
                     auto fighter_snap = load_snapshot(fighter_path);
                     state.return_to_variant_view = true;
-                    ui.push_screen(std::make_unique<SkirmishScreen>(
+                    ui.push_screen(std::make_unique<SkirmishConfigScreen>(
                         std::move(squad_snap), std::move(fighter_snap),
                         vs_.genome_dir, sel_sq.name));
                 } catch (const std::exception& e) {
