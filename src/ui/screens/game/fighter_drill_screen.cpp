@@ -123,12 +123,6 @@ FighterDrillScreen::~FighterDrillScreen() {
     destroy_net_viewer_view(net_viewer_state_);
 }
 
-// ==================== Lifecycle ====================
-
-void FighterDrillScreen::on_enter() {
-    initialized_ = false;
-}
-
 // ==================== Initialization ====================
 
 void FighterDrillScreen::initialize(AppState& state) {

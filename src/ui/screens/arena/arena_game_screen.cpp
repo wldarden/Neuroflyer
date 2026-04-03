@@ -35,12 +35,6 @@ ArenaGameScreen::~ArenaGameScreen() {
     destroy_net_viewer_view(net_viewer_state_);
 }
 
-// ==================== Lifecycle ====================
-
-void ArenaGameScreen::on_enter() {
-    initialized_ = false;
-}
-
 // ==================== Initialization ====================
 
 void ArenaGameScreen::initialize(AppState& state) {

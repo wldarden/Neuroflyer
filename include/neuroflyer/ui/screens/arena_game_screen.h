@@ -22,7 +22,6 @@ public:
     explicit ArenaGameScreen(const ArenaConfig& config);
     ~ArenaGameScreen() override;
 
-    void on_enter() override;
     void on_draw(AppState& state, Renderer& renderer, UIManager& ui) override;
     void post_render(SDL_Renderer* sdl_renderer) override;
     [[nodiscard]] const char* name() const override { return "Arena"; }
