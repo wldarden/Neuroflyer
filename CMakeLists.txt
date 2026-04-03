@@ -82,6 +82,7 @@ add_executable(neuroflyer
     src/engine/squad_leader.cpp
     src/engine/fighter_drill_session.cpp
     src/engine/attack_run_session.cpp
+    src/engine/skirmish.cpp
     src/engine/paths.cpp
 
     # UI — SDL/ImGui rendering and interaction
