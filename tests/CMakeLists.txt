@@ -35,6 +35,7 @@ add_executable(neuroflyer_tests
     ../src/engine/sector_grid.cpp
     ../src/engine/squad_leader.cpp
     ../src/engine/fighter_drill_session.cpp
+    ../src/engine/attack_run_session.cpp
 )
 target_include_directories(neuroflyer_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../include

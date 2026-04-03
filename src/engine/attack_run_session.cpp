@@ -1,0 +1,305 @@
+#include <neuroflyer/attack_run_session.h>
+#include <neuroflyer/collision.h>
+
+#include <algorithm>
+#include <cmath>
+#include <numbers>
+
+namespace neuroflyer {
+
+AttackRunSession::AttackRunSession(const AttackRunConfig& config, uint32_t seed)
+    : config_(config)
+    , starbase_(0.0f, 0.0f, config.starbase_radius, config.starbase_hp, 1)  // team 1 = enemy
+    , squad_center_x_(config.world_width / 2.0f)
+    , squad_center_y_(config.world_height / 2.0f)
+    , rng_(seed)
+{
+    scores_.resize(config_.population_size, 0.0f);
+    tokens_collected_.resize(config_.population_size, 0);
+    spawn_ships();
+    spawn_obstacles();
+    spawn_starbase();
+}
+
+void AttackRunSession::spawn_ships() {
+    std::uniform_real_distribution<float> angle_dist(
+        0.0f, 2.0f * std::numbers::pi_v<float>);
+
+    for (std::size_t i = 0; i < config_.population_size; ++i) {
+        Triangle ship(squad_center_x_, squad_center_y_);
+        ship.rotation = angle_dist(rng_);
+        ship.rotation_speed = config_.rotation_speed;
+        ships_.push_back(ship);
+    }
+}
+
+void AttackRunSession::spawn_obstacles() {
+    std::uniform_real_distribution<float> x_dist(0.0f, config_.world_width);
+    std::uniform_real_distribution<float> y_dist(0.0f, config_.world_height);
+    std::uniform_real_distribution<float> radius_dist(15.0f, 35.0f);
+
+    for (std::size_t i = 0; i < config_.tower_count; ++i) {
+        Tower t;
+        t.x = x_dist(rng_);
+        t.y = y_dist(rng_);
+        t.radius = radius_dist(rng_);
+        t.alive = true;
+        towers_.push_back(t);
+    }
+    for (std::size_t i = 0; i < config_.token_count; ++i) {
+        Token tok;
+        tok.x = x_dist(rng_);
+        tok.y = y_dist(rng_);
+        tok.alive = true;
+        tokens_.push_back(tok);
+    }
+}
+
+void AttackRunSession::spawn_starbase() {
+    const float max_distance = std::min(config_.world_width, config_.world_height) / 2.0f;
+    std::uniform_real_distribution<float> dist_dist(
+        config_.min_starbase_distance, max_distance);
+    std::uniform_real_distribution<float> angle_dist(
+        0.0f, 2.0f * std::numbers::pi_v<float>);
+
+    const float distance = dist_dist(rng_);
+    const float angle = angle_dist(rng_);
+    const float raw_x = squad_center_x_ + distance * std::cos(angle);
+    const float raw_y = squad_center_y_ + distance * std::sin(angle);
+    const float clamped_x = std::clamp(raw_x, config_.starbase_radius,
+                                        config_.world_width - config_.starbase_radius);
+    const float clamped_y = std::clamp(raw_y, config_.starbase_radius,
+                                        config_.world_height - config_.starbase_radius);
+
+    starbase_ = Base(clamped_x, clamped_y,
+                     config_.starbase_radius, config_.starbase_hp, 1);  // team 1 = enemy
+}
+
+uint32_t AttackRunSession::phase_ticks_remaining() const noexcept {
+    if (phase_ == AttackRunPhase::Done) return 0;
+    return config_.phase_duration_ticks - phase_tick_;
+}
+
+int AttackRunSession::phase_number() const noexcept {
+    switch (phase_) {
+        case AttackRunPhase::Phase1: return 1;
+        case AttackRunPhase::Phase2: return 2;
+        case AttackRunPhase::Phase3: return 3;
+        case AttackRunPhase::Done:   return 3;
+    }
+    return 0;
+}
+
+void AttackRunSession::set_ship_actions(
+    std::size_t idx, bool up, bool down, bool left, bool right, bool shoot) {
+    if (idx < ships_.size() && ships_[idx].alive) {
+        ships_[idx].apply_arena_actions(up, down, left, right, shoot);
+    }
+}
+
+void AttackRunSession::tick() {
+    if (phase_ == AttackRunPhase::Done) return;
+
+    // 1. Update ship positions
+    for (auto& ship : ships_) {
+        if (!ship.alive) continue;
+        ship.x += ship.dx;
+        ship.y += ship.dy;
+    }
+
+    // 2. Apply boundary wrapping (toroidal)
+    apply_boundary_rules();
+
+    // 3. Spawn bullets from ships that want to shoot
+    spawn_bullets_from_ships();
+
+    // 4. Update bullets (directional movement + despawn at max_range)
+    update_bullets();
+
+    // 5. Collision resolution
+    resolve_ship_tower_collisions();
+    resolve_ship_token_collisions();
+    resolve_bullet_starbase_collisions();
+    resolve_bullet_tower_collisions();
+
+    // 6. Phase-based movement scoring
+    compute_phase_scores();
+
+    // 7. Decrement shoot cooldowns
+    for (auto& ship : ships_) {
+        if (ship.shoot_cooldown > 0) --ship.shoot_cooldown;
+    }
+
+    // 8. Clean up dead bullets
+    std::erase_if(bullets_, [](const Bullet& b) { return !b.alive; });
+
+    // 9. Advance tick counters
+    ++phase_tick_;
+    ++tick_count_;
+
+    // 10. Phase transitions: timer expired OR starbase destroyed
+    if (phase_tick_ >= config_.phase_duration_ticks || !starbase_.alive()) {
+        advance_phase();
+    }
+}
+
+void AttackRunSession::advance_phase() {
+    phase_tick_ = 0;
+    switch (phase_) {
+        case AttackRunPhase::Phase1:
+            phase_ = AttackRunPhase::Phase2;
+            spawn_starbase();
+            break;
+        case AttackRunPhase::Phase2:
+            phase_ = AttackRunPhase::Phase3;
+            spawn_starbase();
+            break;
+        case AttackRunPhase::Phase3:
+            phase_ = AttackRunPhase::Done;
+            break;
+        case AttackRunPhase::Done:
+            break;
+    }
+}
+
+void AttackRunSession::apply_boundary_rules() {
+    for (auto& ship : ships_) {
+        if (!ship.alive) continue;
+
+        if (config_.wrap_ew) {
+            if (ship.x < 0.0f) ship.x += config_.world_width;
+            else if (ship.x > config_.world_width) ship.x -= config_.world_width;
+        } else {
+            ship.x = std::clamp(ship.x, 0.0f, config_.world_width);
+        }
+
+        if (config_.wrap_ns) {
+            if (ship.y < 0.0f) ship.y += config_.world_height;
+            else if (ship.y > config_.world_height) ship.y -= config_.world_height;
+        } else {
+            ship.y = std::clamp(ship.y, 0.0f, config_.world_height);
+        }
+    }
+}
+
+void AttackRunSession::spawn_bullets_from_ships() {
+    for (std::size_t i = 0; i < ships_.size(); ++i) {
+        auto& ship = ships_[i];
+        if (!ship.alive) continue;
+        if (ship.wants_shoot && ship.shoot_cooldown <= 0) {
+            Bullet b;
+            float fx = std::sin(ship.rotation);
+            float fy = -std::cos(ship.rotation);
+            b.x = ship.x + fx * Triangle::SIZE;
+            b.y = ship.y + fy * Triangle::SIZE;
+            b.dir_x = fx;
+            b.dir_y = fy;
+            b.alive = true;
+            b.owner_index = static_cast<int>(i);
+            b.distance_traveled = 0.0f;
+            b.max_range = config_.bullet_max_range;
+            bullets_.push_back(b);
+            ship.shoot_cooldown = ship.fire_cooldown;
+        }
+    }
+}
+
+void AttackRunSession::update_bullets() {
+    for (auto& b : bullets_) {
+        if (!b.alive) continue;
+        b.update_directional();
+        // Destroy bullets that leave the world boundary
+        if (b.x < 0 || b.x > config_.world_width ||
+            b.y < 0 || b.y > config_.world_height) {
+            b.alive = false;
+        }
+    }
+}
+
+void AttackRunSession::resolve_ship_tower_collisions() {
+    for (std::size_t i = 0; i < ships_.size(); ++i) {
+        if (!ships_[i].alive) continue;
+        for (const auto& tower : towers_) {
+            if (!tower.alive) continue;
+            if (triangle_circle_collision_rotated(ships_[i], tower.x, tower.y, tower.radius)) {
+                ships_[i].alive = false;
+                scores_[i] -= config_.death_penalty;
+                break;
+            }
+        }
+    }
+}
+
+void AttackRunSession::resolve_ship_token_collisions() {
+    for (std::size_t i = 0; i < ships_.size(); ++i) {
+        if (!ships_[i].alive) continue;
+        for (auto& tok : tokens_) {
+            if (!tok.alive) continue;
+            // Use generous proximity check for token pickup (center-to-center distance)
+            // rather than strict vertex-in-circle, since tokens are small collectibles
+            float tdx = ships_[i].x - tok.x;
+            float tdy = ships_[i].y - tok.y;
+            float dist_sq = tdx * tdx + tdy * tdy;
+            float hit_r = tok.radius + Triangle::SIZE;
+            if (dist_sq < hit_r * hit_r) {
+                tok.alive = false;
+                tokens_collected_[i]++;
+                scores_[i] += config_.token_bonus;
+            }
+        }
+    }
+}
+
+void AttackRunSession::resolve_bullet_starbase_collisions() {
+    for (auto& b : bullets_) {
+        if (!b.alive) continue;
+        if (!starbase_.alive()) continue;
+        if (bullet_circle_collision(b.x, b.y, starbase_.x, starbase_.y, starbase_.radius)) {
+            b.alive = false;
+            starbase_.take_damage(config_.base_bullet_damage);
+            if (b.owner_index >= 0 &&
+                static_cast<std::size_t>(b.owner_index) < scores_.size()) {
+                scores_[static_cast<std::size_t>(b.owner_index)] +=
+                    config_.attack_hit_bonus;
+            }
+        }
+    }
+}
+
+void AttackRunSession::resolve_bullet_tower_collisions() {
+    for (auto& b : bullets_) {
+        if (!b.alive) continue;
+        for (auto& tower : towers_) {
+            if (!tower.alive) continue;
+            if (bullet_circle_collision(b.x, b.y, tower.x, tower.y, tower.radius)) {
+                tower.alive = false;
+                b.alive = false;
+                break;
+            }
+        }
+    }
+}
+
+void AttackRunSession::compute_phase_scores() {
+    if (phase_ == AttackRunPhase::Done) return;
+    if (!starbase_.alive()) return;
+
+    for (std::size_t i = 0; i < ships_.size(); ++i) {
+        if (!ships_[i].alive) continue;
+
+        const float vx = ships_[i].dx;
+        const float vy = ships_[i].dy;
+
+        // All phases score movement toward the starbase
+        float dir_x = starbase_.x - ships_[i].x;
+        float dir_y = starbase_.y - ships_[i].y;
+        const float len = std::sqrt(dir_x * dir_x + dir_y * dir_y);
+        if (len > 0.001f) {
+            dir_x /= len;
+            dir_y /= len;
+            scores_[i] += (vx * dir_x + vy * dir_y) * config_.travel_weight;
+        }
+    }
+}
+
+} // namespace neuroflyer
