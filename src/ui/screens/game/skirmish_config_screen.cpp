@@ -96,6 +96,7 @@ void SkirmishConfigScreen::on_draw(AppState& /*state*/, Renderer& /*renderer*/,
     ui::slider_float("Bullet Max Range", &config_.bullet_max_range, 200.0f, 3000.0f);
     ui::checkbox("Wrap N/S", &config_.wrap_ns);
     ui::checkbox("Wrap E/W", &config_.wrap_ew);
+    ui::checkbox("Friendly Fire", &config_.friendly_fire);
     ImGui::Spacing();
 
     // --- Scoring ---
