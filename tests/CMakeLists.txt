@@ -22,6 +22,7 @@ add_executable(neuroflyer_tests
     fighter_drill_session_test.cpp
     attack_run_session_test.cpp
     skirmish_test.cpp
+    skirmish_tournament_test.cpp
     ../src/engine/game.cpp
     ../src/engine/arena_session.cpp
     ../src/engine/ray.cpp
