@@ -38,6 +38,9 @@ struct ArenaConfig {
     float base_radius = 100.0f;
     float base_bullet_damage = 10.0f;  // HP removed per bullet hit
 
+    // Bullets
+    bool friendly_fire = false;  // when false, bullets pass through teammate ships
+
     // Squads
     std::size_t num_squads = 1;
     std::size_t fighters_per_squad = 8;
