@@ -260,6 +260,7 @@ TEST(ArenaSessionTest, AllyKillRemoves1000Points) {
     config.time_limit_ticks = 1000;
     config.world_width = 1000.0f;
     config.world_height = 1000.0f;
+    config.friendly_fire = true;  // must be on to allow ally kills
     nf::ArenaSession arena(config, 42);
 
     // Ship 0 and 1 are on team 0. Place bullet from ship 0 on ship 1.
@@ -457,4 +458,109 @@ TEST(ArenaSession, SquadStatsIncludesSpacing) {
     // Spacing should be a valid normalized value
     EXPECT_GE(stats.squad_spacing, 0.0f);
     EXPECT_LE(stats.squad_spacing, 1.0f);
+}
+
+TEST(ArenaSessionTest, FriendlyFireOffBulletsPassThroughTeammates) {
+    nf::ArenaConfig config;
+    config.num_teams = 2;
+    config.num_squads = 1;
+    config.fighters_per_squad = 2;
+    config.tower_count = 0;
+    config.token_count = 0;
+    config.time_limit_ticks = 1000;
+    config.world_width = 1000.0f;
+    config.world_height = 1000.0f;
+    config.friendly_fire = false;  // bullets should pass through teammates
+    nf::ArenaSession arena(config, 42);
+
+    // Ship 0 and 1 are on team 0.
+    ASSERT_EQ(arena.team_of(0), 0);
+    ASSERT_EQ(arena.team_of(1), 0);
+
+    // Place bullet from ship 0 directly on ship 1.
+    nf::Bullet b;
+    b.x = arena.ships()[1].x;
+    b.y = arena.ships()[1].y;
+    b.alive = true;
+    b.dir_x = 0.0f;
+    b.dir_y = -1.0f;
+    b.owner_index = 0;
+    b.distance_traveled = 0.0f;
+    b.max_range = 500.0f;
+    arena.add_bullet(b);
+    arena.resolve_bullet_ship_collisions();
+
+    // Ship 1 should still be alive — bullet passed through.
+    EXPECT_TRUE(arena.ships()[1].alive);
+    EXPECT_EQ(arena.ally_kills()[0], 0);
+    // Bullet should still be alive (it wasn't consumed).
+    EXPECT_TRUE(arena.bullets()[0].alive);
+}
+
+TEST(ArenaSessionTest, FriendlyFireOnBulletsKillTeammates) {
+    nf::ArenaConfig config;
+    config.num_teams = 2;
+    config.num_squads = 1;
+    config.fighters_per_squad = 2;
+    config.tower_count = 0;
+    config.token_count = 0;
+    config.time_limit_ticks = 1000;
+    config.world_width = 1000.0f;
+    config.world_height = 1000.0f;
+    config.friendly_fire = true;  // bullets SHOULD kill teammates
+    nf::ArenaSession arena(config, 42);
+
+    ASSERT_EQ(arena.team_of(0), 0);
+    ASSERT_EQ(arena.team_of(1), 0);
+
+    nf::Bullet b;
+    b.x = arena.ships()[1].x;
+    b.y = arena.ships()[1].y;
+    b.alive = true;
+    b.dir_x = 0.0f;
+    b.dir_y = -1.0f;
+    b.owner_index = 0;
+    b.distance_traveled = 0.0f;
+    b.max_range = 500.0f;
+    arena.add_bullet(b);
+    arena.resolve_bullet_ship_collisions();
+
+    // Ship 1 should be dead — friendly fire is on.
+    EXPECT_FALSE(arena.ships()[1].alive);
+    EXPECT_EQ(arena.ally_kills()[0], 1);
+}
+
+TEST(ArenaSessionTest, FriendlyFireOffEnemyBulletsStillKill) {
+    nf::ArenaConfig config;
+    config.num_teams = 2;
+    config.num_squads = 1;
+    config.fighters_per_squad = 2;
+    config.tower_count = 0;
+    config.token_count = 0;
+    config.time_limit_ticks = 1000;
+    config.world_width = 1000.0f;
+    config.world_height = 1000.0f;
+    config.friendly_fire = false;
+    nf::ArenaSession arena(config, 42);
+
+    // Ship 0 is team 0, ship 2 is team 1.
+    ASSERT_EQ(arena.team_of(0), 0);
+    ASSERT_EQ(arena.team_of(2), 1);
+
+    // Place bullet from ship 0 on enemy ship 2.
+    nf::Bullet b;
+    b.x = arena.ships()[2].x;
+    b.y = arena.ships()[2].y;
+    b.alive = true;
+    b.dir_x = 0.0f;
+    b.dir_y = -1.0f;
+    b.owner_index = 0;
+    b.distance_traveled = 0.0f;
+    b.max_range = 500.0f;
+    arena.add_bullet(b);
+    arena.resolve_bullet_ship_collisions();
+
+    // Enemy ship should be dead — cross-team kills still work.
+    EXPECT_FALSE(arena.ships()[2].alive);
+    EXPECT_EQ(arena.enemy_kills()[0], 1);
 }

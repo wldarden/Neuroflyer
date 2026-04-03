@@ -238,6 +238,14 @@ void ArenaSession::resolve_bullet_ship_collisions() {
             if (!ships_[i].alive) continue;
             // Skip self-hits
             if (b.owner_index == static_cast<int>(i)) continue;
+            // Skip friendly fire when disabled
+            if (!config_.friendly_fire && b.owner_index >= 0) {
+                auto killer = static_cast<std::size_t>(b.owner_index);
+                if (killer < team_assignments_.size() &&
+                    team_assignments_[killer] == team_assignments_[i]) {
+                    continue;  // bullet passes through teammate
+                }
+            }
             // Check rotation-aware vertex-based collision plus center proximity.
             bool hit = bullet_triangle_collision_rotated(b.x, b.y, ships_[i]);
             if (!hit) {
