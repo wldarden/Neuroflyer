@@ -21,6 +21,7 @@
 #include <neuroflyer/snapshot.h>
 #include <neuroflyer/snapshot_io.h>
 #include <neuroflyer/snapshot_utils.h>
+#include <neuroflyer/arena_sensor.h>
 
 #include <imgui.h>
 
@@ -1246,6 +1247,37 @@ void VariantViewerScreen::on_draw(
                     static_cast<std::size_t>(vs_.selected_idx)];
                 try {
                     auto snap = load_snapshot(variant_path(sel));
+                    auto ind = snapshot_to_individual(snap);
+
+                    // Check if adaptation needed for fighter context
+                    auto target_ids = build_arena_fighter_input_labels(
+                        snap.ship_design);
+                    if (!ind.topology.input_ids.empty() &&
+                        ind.topology.input_ids != target_ids) {
+                        auto [adapted, report] = adapt_individual_inputs(
+                            ind, target_ids, snap.ship_design, state.rng);
+                        if (report.needed()) {
+                            auto adapted_snap = snap;
+                            adapted_snap.topology = adapted.topology;
+                            adapted_snap.weights =
+                                adapted.genome.flatten("layer_");
+                            std::string var_name = sel.name;
+                            std::string msg = report.message();
+                            ui.push_modal(std::make_unique<ConfirmModal>(
+                                "Network Adaptation Required",
+                                msg + "\nContinue with adapted network?",
+                                [this, adapted_snap = std::move(adapted_snap),
+                                 var_name, &state, &ui]() {
+                                    state.return_to_variant_view = true;
+                                    ui.push_screen(
+                                        std::make_unique<FighterDrillScreen>(
+                                            adapted_snap, vs_.genome_dir,
+                                            var_name));
+                                }));
+                            break;
+                        }
+                    }
+                    // No adaptation needed — launch directly
                     state.return_to_variant_view = true;
                     ui.push_screen(std::make_unique<FighterDrillScreen>(
                         std::move(snap), vs_.genome_dir, sel.name));
@@ -1266,6 +1298,37 @@ void VariantViewerScreen::on_draw(
                     static_cast<std::size_t>(vs_.selected_idx)];
                 try {
                     auto snap = load_snapshot(variant_path(sel));
+                    auto ind = snapshot_to_individual(snap);
+
+                    // Check if adaptation needed for fighter context
+                    auto target_ids = build_arena_fighter_input_labels(
+                        snap.ship_design);
+                    if (!ind.topology.input_ids.empty() &&
+                        ind.topology.input_ids != target_ids) {
+                        auto [adapted, report] = adapt_individual_inputs(
+                            ind, target_ids, snap.ship_design, state.rng);
+                        if (report.needed()) {
+                            auto adapted_snap = snap;
+                            adapted_snap.topology = adapted.topology;
+                            adapted_snap.weights =
+                                adapted.genome.flatten("layer_");
+                            std::string var_name = sel.name;
+                            std::string msg = report.message();
+                            ui.push_modal(std::make_unique<ConfirmModal>(
+                                "Network Adaptation Required",
+                                msg + "\nContinue with adapted network?",
+                                [this, adapted_snap = std::move(adapted_snap),
+                                 var_name, &state, &ui]() {
+                                    state.return_to_variant_view = true;
+                                    ui.push_screen(
+                                        std::make_unique<AttackRunScreen>(
+                                            adapted_snap, vs_.genome_dir,
+                                            var_name));
+                                }));
+                            break;
+                        }
+                    }
+                    // No adaptation needed — launch directly
                     state.return_to_variant_view = true;
                     ui.push_screen(std::make_unique<AttackRunScreen>(
                         std::move(snap), vs_.genome_dir, sel.name));

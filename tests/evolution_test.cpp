@@ -1,5 +1,6 @@
 #include <neuroflyer/evolution.h>
 #include <neuroflyer/ship_design.h>
+#include <neuroflyer/snapshot_utils.h>
 
 #include <gtest/gtest.h>
 
@@ -253,5 +254,59 @@ TEST(EvolutionTest, ConvertVariantToFighterNetworkWorks) {
     std::vector<float> input(13, 0.5f);
     auto output = net.forward(input);
     EXPECT_EQ(output.size(), 5u);
+}
+
+// --- from_design + adapt_individual_inputs integration tests ---
+
+TEST(EvolutionTest, FromDesignSetsInputIds) {
+    nf::ShipDesign design;
+    design.memory_slots = 2;
+    std::mt19937 rng(42);
+    auto ind = nf::Individual::from_design(design, {4}, rng);
+    EXPECT_FALSE(ind.topology.input_ids.empty());
+    EXPECT_EQ(ind.topology.input_ids.size(), ind.topology.input_size);
+    EXPECT_FALSE(ind.topology.output_ids.empty());
+}
+
+TEST(EvolutionTest, AdaptIndividualNoOp) {
+    nf::ShipDesign design;
+    design.memory_slots = 2;
+    std::mt19937 rng(42);
+    auto ind = nf::Individual::from_design(design, {4}, rng);
+    auto target = ind.topology.input_ids;  // same IDs
+    auto [adapted, report] = nf::adapt_individual_inputs(
+        ind, target, design, rng);
+    EXPECT_FALSE(report.needed());
+}
+
+TEST(EvolutionTest, AdaptIndividualAddsRemoves) {
+    nf::ShipDesign design;
+    design.memory_slots = 2;
+    std::mt19937 rng(42);
+    auto ind = nf::Individual::from_design(design, {4}, rng);
+    // Modify target: add a new ID, remove one existing
+    auto target = ind.topology.input_ids;
+    target.push_back("NEW_INPUT");
+    if (!target.empty()) target.erase(target.begin());
+    auto [adapted, report] = nf::adapt_individual_inputs(
+        ind, target, design, rng);
+    EXPECT_TRUE(report.needed());
+    EXPECT_FALSE(report.added.empty());
+    EXPECT_FALSE(report.removed.empty());
+    // Adapted individual should have the new topology size
+    EXPECT_EQ(adapted.topology.input_size, target.size());
+}
+
+TEST(EvolutionTest, AdaptIndividualLegacyNoIds) {
+    // Individual with no input_ids (legacy) should pass through unchanged
+    nf::ShipDesign design;
+    design.memory_slots = 0;
+    std::mt19937 rng(42);
+    auto ind = nf::Individual::random(5, {4}, 3, rng);
+    // Ensure no IDs
+    ASSERT_TRUE(ind.topology.input_ids.empty());
+    auto [adapted, report] = nf::adapt_individual_inputs(
+        ind, {"a", "b", "c", "d", "e"}, design, rng);
+    EXPECT_FALSE(report.needed());
 }
 
