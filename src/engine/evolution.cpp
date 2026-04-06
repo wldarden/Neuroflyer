@@ -1,5 +1,9 @@
 #include <neuroflyer/evolution.h>
+#include <neuroflyer/arena_sensor.h>
 #include <neuroflyer/sensor_engine.h>
+#include <neuroflyer/snapshot_utils.h>
+
+#include <neuralnet/adapt.h>
 
 #include <algorithm>
 #include <cassert>
@@ -7,6 +11,7 @@
 #include <cmath>
 #include <cstring>
 #include <map>
+#include <random>
 
 namespace neuroflyer {
 
@@ -248,86 +253,136 @@ bool same_topology(const Individual& a, const Individual& b) {
     return true;
 }
 
+namespace {
+
+/// Build scroller source IDs using arena-compatible naming for sensor channels.
+/// This ensures adapt_topology_inputs can match shared channels (distance, is_tower,
+/// is_token, memory) when converting from scroller to arena fighter layout.
+std::vector<std::string> build_scroller_source_ids(const ShipDesign& design) {
+    std::vector<std::string> ids;
+
+    int sensor_idx = 0;
+    for (const auto& s : design.sensors) {
+        char buf[32];
+        if (!s.is_full_sensor) {
+            // Sight sensor: same ID as arena
+            std::snprintf(buf, sizeof(buf), "SNS %d D", sensor_idx);
+            ids.push_back(buf);
+        } else {
+            // Full sensor scroller layout: [distance, is_tower, token_value, is_token]
+            // Arena-compatible IDs for shared channels
+            std::snprintf(buf, sizeof(buf), "SNS %d D", sensor_idx);
+            ids.push_back(buf);
+            std::snprintf(buf, sizeof(buf), "SNS %d TWR", sensor_idx);
+            ids.push_back(buf);
+            // token_value is scroller-only; use a unique ID that won't match arena
+            std::snprintf(buf, sizeof(buf), "SNS %d $V", sensor_idx);
+            ids.push_back(buf);
+            // is_token maps to arena's TKN
+            std::snprintf(buf, sizeof(buf), "SNS %d TKN", sensor_idx);
+            ids.push_back(buf);
+        }
+        ++sensor_idx;
+    }
+
+    // Scroller position inputs (not in arena)
+    ids.push_back("POS X");
+    ids.push_back("POS Y");
+    ids.push_back("SPEED");
+
+    // Memory (same IDs as arena)
+    for (uint16_t m = 0; m < design.memory_slots; ++m) {
+        char buf[16];
+        std::snprintf(buf, sizeof(buf), "MEM %d", m);
+        ids.push_back(buf);
+    }
+
+    return ids;
+}
+
+/// Flatten only weight and bias genes (skip activations) for adapt_topology_inputs.
+/// adapt_topology_inputs expects [L0_weights, L0_biases, L1_weights, L1_biases, ...]
+/// but StructuredGenome::flatten("layer_") includes activation genes too.
+std::vector<float> flatten_weights_and_biases(
+    const evolve::StructuredGenome& genome,
+    const neuralnet::NetworkTopology& topology) {
+
+    std::vector<float> result;
+    for (std::size_t l = 0; l < topology.layers.size(); ++l) {
+        std::string lp = "layer_" + std::to_string(l);
+        if (genome.has_gene(lp + "_weights")) {
+            const auto& vals = genome.gene(lp + "_weights").values;
+            result.insert(result.end(), vals.begin(), vals.end());
+        }
+        if (genome.has_gene(lp + "_biases")) {
+            const auto& vals = genome.gene(lp + "_biases").values;
+            result.insert(result.end(), vals.begin(), vals.end());
+        }
+    }
+    return result;
+}
+
+} // namespace
+
 Individual convert_variant_to_fighter(
     const Individual& variant,
     const ShipDesign& design) {
 
-    Individual result;
+    auto target_ids = build_arena_fighter_input_labels(design);
+    auto target_output_ids = build_output_ids(design);
 
-    // 1. Compute arena input size
-    std::size_t arena_sensor_vals = 0;
-    for (const auto& s : design.sensors) {
-        arena_sensor_vals += s.is_full_sensor ? 5 : 1;
+    auto source = variant;
+
+    // If source has no input_ids, assign scroller-compatible IDs that share
+    // naming with arena labels for overlapping channels (distance, is_tower,
+    // is_token, memory).
+    if (source.topology.input_ids.empty()) {
+        source.topology.input_ids = build_scroller_source_ids(design);
+    }
+    if (source.topology.output_ids.empty()) {
+        source.topology.output_ids = build_output_ids(design);
     }
 
-    std::size_t arena_input = arena_sensor_vals + 6 + design.memory_slots;
+    // Flatten only weights and biases (not activations) since
+    // adapt_topology_inputs expects [L0_weights, L0_biases, L1_weights, ...]
+    auto flat_weights = flatten_weights_and_biases(source.genome, source.topology);
+    std::mt19937 rng(std::random_device{}());
+    auto result = neuralnet::adapt_topology_inputs(
+        source.topology, flat_weights, target_ids, rng);
 
-    // 2. Build new topology — same layers, new input_size
-    result.topology.input_size = arena_input;
-    result.topology.layers = variant.topology.layers;
+    // Build adapted Individual
+    Individual adapted;
+    adapted.topology = result.adapted_topology;
+    adapted.topology.output_ids = target_output_ids;
+    adapted.genome = build_genome_skeleton(design, adapted.topology);
 
-    // 3. Copy genome and resize layer_0_weights
-    result.genome = variant.genome;
-
-    if (variant.topology.layers.empty()) return result;
-
-    std::size_t hidden0_size = variant.topology.layers[0].output_size;
-    std::size_t old_input = variant.topology.input_size;
-
-    // 4. Build new weight matrix for layer 0
-    std::vector<float> new_weights(arena_input * hidden0_size, 0.0f);
-
-    const auto& old_weights = variant.genome.gene("layer_0_weights").values;
-
-    for (std::size_t out = 0; out < hidden0_size; ++out) {
-        std::size_t src_col = 0;  // column in scroller weight matrix
-        std::size_t dst_col = 0;  // column in arena weight matrix
-
-        // Map sensor weights
-        for (const auto& sensor : design.sensors) {
-            if (sensor.is_full_sensor) {
-                // Copy distance weight
-                new_weights[out * arena_input + dst_col + 0] =
-                    old_weights[out * old_input + src_col + 0];
-                // Copy is_tower weight
-                new_weights[out * arena_input + dst_col + 1] =
-                    old_weights[out * old_input + src_col + 1];
-                // Map scroller is_token to arena is_token
-                new_weights[out * arena_input + dst_col + 2] =
-                    old_weights[out * old_input + src_col + 3];
-                // arena[3]=is_friend, arena[4]=is_bullet -> zero (already 0)
-                src_col += 4;  // scroller: distance, is_tower, token_value, is_token
-                dst_col += 5;  // arena: distance, is_tower, is_token, is_friend, is_bullet
-            } else {
-                // Sight sensor: just distance, copy directly
-                new_weights[out * arena_input + dst_col] =
-                    old_weights[out * old_input + src_col];
-                src_col += 1;
-                dst_col += 1;
+    // Fill genome weights from adapted flat weights
+    std::size_t offset = 0;
+    for (std::size_t l = 0; l < adapted.topology.layers.size(); ++l) {
+        std::string lp = "layer_" + std::to_string(l);
+        if (adapted.genome.has_gene(lp + "_weights")) {
+            for (auto& v : adapted.genome.gene(lp + "_weights").values) {
+                v = (offset < result.adapted_weights.size())
+                    ? result.adapted_weights[offset++] : 0.0f;
             }
         }
-
-        // Skip scroller position inputs (3 columns)
-        src_col += 3;
-        assert(src_col + design.memory_slots == old_input && "Variant topology mismatch in convert_variant_to_fighter");
-
-        // Squad leader inputs (6 columns) — leave as zero
-        dst_col += 6;
-
-        // Copy memory weights
-        for (std::size_t m = 0; m < design.memory_slots; ++m) {
-            new_weights[out * arena_input + dst_col + m] =
-                old_weights[out * old_input + src_col + m];
+        if (adapted.genome.has_gene(lp + "_biases")) {
+            for (auto& v : adapted.genome.gene(lp + "_biases").values) {
+                v = (offset < result.adapted_weights.size())
+                    ? result.adapted_weights[offset++] : 0.0f;
+            }
         }
     }
 
-    // 5. Replace layer_0_weights in genome
-    result.genome.gene("layer_0_weights").values = std::move(new_weights);
+    // Copy activation genes from source (they don't change with input adaptation)
+    for (std::size_t l = 0; l < adapted.topology.layers.size(); ++l) {
+        std::string atag = "layer_" + std::to_string(l) + "_activations";
+        if (source.genome.has_gene(atag) && adapted.genome.has_gene(atag)) {
+            adapted.genome.gene(atag).values = source.genome.gene(atag).values;
+        }
+    }
 
-    // Biases and activations for layer 0: unchanged (same number of output nodes)
-    // All higher layers: unchanged (same dimensions)
-
-    return result;
+    return adapted;
 }
 
 void mutate_individual(Individual& ind, const EvolutionConfig& /*config*/, std::mt19937& rng) {
@@ -758,6 +813,74 @@ Individual snapshot_to_individual(const Snapshot& snap) {
     }
     ind.fitness = 0.0f;
     return ind;
+}
+
+std::string AdaptReport::message() const {
+    std::string msg;
+    if (!added.empty()) {
+        msg += "Adding nodes with random weights:";
+        for (const auto& id : added) msg += " " + id;
+        msg += "\n";
+    }
+    if (!removed.empty()) {
+        msg += "Removing unused nodes:";
+        for (const auto& id : removed) msg += " " + id;
+    }
+    return msg;
+}
+
+std::pair<Individual, AdaptReport> adapt_individual_inputs(
+    const Individual& source,
+    const std::vector<std::string>& target_input_ids,
+    const ShipDesign& design,
+    std::mt19937& rng) {
+
+    // Legacy net (no IDs) or exact match -> no adaptation
+    if (source.topology.input_ids.empty() || source.topology.input_ids == target_input_ids) {
+        return {source, {}};
+    }
+
+    // Flatten only weights and biases (not activations) for adapt_topology_inputs
+    auto flat_weights = flatten_weights_and_biases(source.genome, source.topology);
+    auto result = neuralnet::adapt_topology_inputs(
+        source.topology, flat_weights, target_input_ids, rng);
+
+    // Build adapted Individual
+    Individual adapted;
+    adapted.topology = result.adapted_topology;
+    adapted.topology.output_ids = build_output_ids(design);
+    adapted.genome = build_genome_skeleton(design, adapted.topology);
+
+    // Fill genome from adapted weights (same pattern as snapshot_to_individual)
+    std::size_t offset = 0;
+    for (std::size_t l = 0; l < adapted.topology.layers.size(); ++l) {
+        std::string lp = "layer_" + std::to_string(l);
+        if (adapted.genome.has_gene(lp + "_weights")) {
+            for (auto& v : adapted.genome.gene(lp + "_weights").values) {
+                v = (offset < result.adapted_weights.size())
+                    ? result.adapted_weights[offset++] : 0.0f;
+            }
+        }
+        if (adapted.genome.has_gene(lp + "_biases")) {
+            for (auto& v : adapted.genome.gene(lp + "_biases").values) {
+                v = (offset < result.adapted_weights.size())
+                    ? result.adapted_weights[offset++] : 0.0f;
+            }
+        }
+    }
+
+    // Copy activation genes from source (they don't change with input adaptation)
+    for (std::size_t l = 0; l < adapted.topology.layers.size(); ++l) {
+        std::string atag = "layer_" + std::to_string(l) + "_activations";
+        if (source.genome.has_gene(atag) && adapted.genome.has_gene(atag)) {
+            adapted.genome.gene(atag).values = source.genome.gene(atag).values;
+        }
+    }
+
+    AdaptReport report;
+    report.added = result.added_ids;
+    report.removed = result.removed_ids;
+    return {adapted, report};
 }
 
 std::vector<Individual> create_population_from_snapshot(

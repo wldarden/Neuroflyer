@@ -3,6 +3,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
+
 namespace nf = neuroflyer;
 
 TEST(EvolutionTest, CreateIndividual) {
@@ -144,7 +146,7 @@ TEST(EvolutionTest, ConvertVariantToFighterSensorWeightsPreserved) {
     }
 }
 
-TEST(EvolutionTest, ConvertVariantToFighterNewInputsZero) {
+TEST(EvolutionTest, ConvertVariantToFighterNewInputsSmallRandom) {
     std::mt19937 rng(42);
     nf::ShipDesign design;
     nf::SensorDef full_sensor;
@@ -167,13 +169,13 @@ TEST(EvolutionTest, ConvertVariantToFighterNewInputsZero) {
     for (std::size_t out = 0; out < hidden_size; ++out) {
         // is_token (arena col 2) -- mapped from scroller col 3
         EXPECT_FLOAT_EQ(new_weights[out * 13 + 2], old_weights[out * 9 + 3]);
-        // is_friend (arena col 3) -- zero
-        EXPECT_FLOAT_EQ(new_weights[out * 13 + 3], 0.0f);
-        // is_bullet (arena col 4) -- zero
-        EXPECT_FLOAT_EQ(new_weights[out * 13 + 4], 0.0f);
-        // Squad leader inputs (cols 5-10) -- all zero
+        // is_friend (arena col 3) -- small random (new input via adapt_topology_inputs)
+        EXPECT_LE(std::abs(new_weights[out * 13 + 3]), 0.1f);
+        // is_bullet (arena col 4) -- small random
+        EXPECT_LE(std::abs(new_weights[out * 13 + 4]), 0.1f);
+        // Squad leader inputs (cols 5-10) -- small random
         for (int sl = 5; sl <= 10; ++sl) {
-            EXPECT_FLOAT_EQ(new_weights[out * 13 + sl], 0.0f);
+            EXPECT_LE(std::abs(new_weights[out * 13 + sl]), 0.1f);
         }
     }
 }
