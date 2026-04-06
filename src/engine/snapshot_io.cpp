@@ -82,7 +82,7 @@ void write_string(std::ostream& out, const std::string& s) {
 // ---- Constants ----
 
 constexpr uint32_t MAGIC = 0x4E465300;  // "NFS\0"
-constexpr uint16_t CURRENT_VERSION = 7;
+constexpr uint16_t CURRENT_VERSION = 8;
 constexpr uint16_t MIN_VERSION = 1;
 
 // ---- Payload serialization ----
@@ -132,6 +132,16 @@ void write_payload(std::ostream& out, const Snapshot& snap) {
         for (auto act : layer.node_activations) {
             write_val<uint8_t>(out, static_cast<uint8_t>(act));
         }
+    }
+
+    // v8: node IDs
+    write_val<uint32_t>(out, static_cast<uint32_t>(snap.topology.input_ids.size()));
+    for (const auto& id : snap.topology.input_ids) {
+        write_string(out, id);
+    }
+    write_val<uint32_t>(out, static_cast<uint32_t>(snap.topology.output_ids.size()));
+    for (const auto& id : snap.topology.output_ids) {
+        write_string(out, id);
     }
 
     // Weights
@@ -207,6 +217,20 @@ Snapshot parse_payload(std::istream& in, uint16_t version) {
             }
         }
         // v1/v2/v3: node_activations stays empty (per-layer default)
+    }
+
+    // v8: node IDs
+    if (version >= 8) {
+        uint32_t input_id_count = read_val<uint32_t>(in);
+        snap.topology.input_ids.reserve(input_id_count);
+        for (uint32_t i = 0; i < input_id_count; ++i) {
+            snap.topology.input_ids.push_back(read_string(in));
+        }
+        uint32_t output_id_count = read_val<uint32_t>(in);
+        snap.topology.output_ids.reserve(output_id_count);
+        for (uint32_t i = 0; i < output_id_count; ++i) {
+            snap.topology.output_ids.push_back(read_string(in));
+        }
     }
 
     // Weights

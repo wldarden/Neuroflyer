@@ -2,6 +2,7 @@
 #include <neuroflyer/snapshot_io.h>
 #include <gtest/gtest.h>
 #include <cstring>
+#include <filesystem>
 #include <sstream>
 
 namespace nf = neuroflyer;
@@ -238,4 +239,65 @@ TEST(SnapshotIOTest, V6EmptyPairedFighterForFighterSnapshot) {
     std::istringstream in(out.str());
     auto loaded = nf::load_snapshot(in);
     EXPECT_TRUE(loaded.paired_fighter_name.empty());
+}
+
+TEST(SnapshotIOTest, V8RoundTripWithNodeIds) {
+    // Create a snapshot with node IDs
+    nf::Snapshot snap;
+    snap.name = "test-v8-ids";
+    snap.topology.input_size = 3;
+    snap.topology.input_ids = {"sensor_0", "heading", "speed"};
+    snap.topology.layers = {
+        {.output_size = 2, .activation = neuralnet::Activation::Tanh, .node_activations = {}}
+    };
+    snap.topology.output_ids = {"left", "right"};
+    snap.ship_design.memory_slots = 0;
+    snap.net_type = nf::NetType::Fighter;
+    // Weights: 3*2 weights + 2 biases = 8 floats
+    snap.weights = {0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f};
+
+    // Save to temp file
+    auto tmp = std::filesystem::temp_directory_path() / "test_v8_ids.bin";
+    nf::save_snapshot(snap, tmp.string());
+
+    // Load back
+    auto loaded = nf::load_snapshot(tmp.string());
+
+    // Verify IDs survived
+    ASSERT_EQ(loaded.topology.input_ids.size(), 3u);
+    EXPECT_EQ(loaded.topology.input_ids[0], "sensor_0");
+    EXPECT_EQ(loaded.topology.input_ids[1], "heading");
+    EXPECT_EQ(loaded.topology.input_ids[2], "speed");
+    ASSERT_EQ(loaded.topology.output_ids.size(), 2u);
+    EXPECT_EQ(loaded.topology.output_ids[0], "left");
+    EXPECT_EQ(loaded.topology.output_ids[1], "right");
+
+    // Verify other data survived too
+    EXPECT_EQ(loaded.name, "test-v8-ids");
+    EXPECT_EQ(loaded.topology.input_size, 3u);
+    EXPECT_EQ(loaded.weights.size(), 8u);
+
+    std::filesystem::remove(tmp);
+}
+
+TEST(SnapshotIOTest, V8EmptyIdsRoundTrip) {
+    // Snapshot with no IDs (legacy behavior) should save and load fine
+    nf::Snapshot snap;
+    snap.name = "test-v8-no-ids";
+    snap.topology.input_size = 2;
+    snap.topology.layers = {
+        {.output_size = 1, .activation = neuralnet::Activation::Tanh, .node_activations = {}}
+    };
+    // input_ids and output_ids left empty
+    snap.weights = {0.1f, 0.2f, 0.3f};
+
+    auto tmp = std::filesystem::temp_directory_path() / "test_v8_no_ids.bin";
+    nf::save_snapshot(snap, tmp.string());
+    auto loaded = nf::load_snapshot(tmp.string());
+
+    EXPECT_TRUE(loaded.topology.input_ids.empty());
+    EXPECT_TRUE(loaded.topology.output_ids.empty());
+    EXPECT_EQ(loaded.topology.input_size, 2u);
+
+    std::filesystem::remove(tmp);
 }
