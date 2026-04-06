@@ -1,4 +1,6 @@
 #include <neuroflyer/team_evolution.h>
+#include <neuroflyer/arena_sensor.h>
+#include <neuroflyer/sensor_engine.h>
 
 #include <algorithm>
 
@@ -21,6 +23,8 @@ TeamIndividual TeamIndividual::create(
         ntm_config.hidden_sizes,
         ntm_config.output_size,
         rng);
+    team.ntm_individual.topology.input_ids = build_ntm_input_ids();
+    team.ntm_individual.topology.output_ids = build_ntm_output_ids();
 
     // Squad leader net: use saved variant if provided, otherwise random
     if (squad_variant) {
@@ -32,10 +36,18 @@ TeamIndividual TeamIndividual::create(
             leader_config.output_size,
             rng);
     }
+    team.squad_individual.topology.input_ids = build_squad_leader_input_labels();
+    team.squad_individual.topology.output_ids = build_squad_leader_output_labels();
 
     // Fighter net: uses arena input size (sensors + 6 squad leader inputs + memory)
     if (variant) {
-        team.fighter_individual = convert_variant_to_fighter(*variant, fighter_design);
+        // Check if variant is already fighter-sized (skip conversion if so)
+        std::size_t arena_input = compute_arena_input_size(fighter_design);
+        if (variant->topology.input_size == arena_input) {
+            team.fighter_individual = *variant;  // already a fighter net
+        } else {
+            team.fighter_individual = convert_variant_to_fighter(*variant, fighter_design);
+        }
     } else {
         std::size_t arena_input = compute_arena_input_size(fighter_design);
         std::size_t arena_output = compute_output_size(fighter_design);
@@ -45,6 +57,8 @@ TeamIndividual TeamIndividual::create(
             arena_output,
             rng);
     }
+    team.fighter_individual.topology.input_ids = build_arena_fighter_input_labels(fighter_design);
+    team.fighter_individual.topology.output_ids = build_output_ids(fighter_design);
 
     return team;
 }

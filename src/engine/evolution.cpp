@@ -1,4 +1,5 @@
 #include <neuroflyer/evolution.h>
+#include <neuroflyer/sensor_engine.h>
 
 #include <algorithm>
 #include <cassert>
@@ -129,6 +130,9 @@ Individual Individual::from_design(const ShipDesign& design,
     ind.topology.layers.push_back(
         {.output_size = compute_output_size(design),
          .activation = neuralnet::Activation::Tanh});
+
+    ind.topology.input_ids = build_input_labels(design);
+    ind.topology.output_ids = build_output_ids(design);
 
     ind.genome = build_genome_skeleton(design, ind.topology);
 

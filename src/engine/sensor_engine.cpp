@@ -403,4 +403,20 @@ std::vector<std::string> build_squad_leader_output_labels() {
     };
 }
 
+std::vector<std::string> build_output_ids(const ShipDesign& design) {
+    std::vector<std::string> ids = {"UP", "DN", "LF", "RT", "SH"};
+    for (std::size_t i = 0; i < design.memory_slots; ++i) {
+        ids.push_back("M" + std::to_string(i));
+    }
+    return ids;
+}
+
+std::vector<std::string> build_ntm_input_ids() {
+    return {"H Sin", "H Cos", "Dist", "HP", "Alive%", "IsShip", "IsBase"};
+}
+
+std::vector<std::string> build_ntm_output_ids() {
+    return {"Threat"};
+}
+
 } // namespace neuroflyer

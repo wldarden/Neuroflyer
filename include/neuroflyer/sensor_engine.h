@@ -109,4 +109,13 @@ struct DecodedOutput {
 /// Build output labels for a squad leader network (5 tactical orders).
 [[nodiscard]] std::vector<std::string> build_squad_leader_output_labels();
 
+/// Output node IDs for solo/fighter nets: UP, DN, LF, RT, SH + memory slots.
+[[nodiscard]] std::vector<std::string> build_output_ids(const ShipDesign& design);
+
+/// NTM sub-net input node IDs (7 fixed threat features).
+[[nodiscard]] std::vector<std::string> build_ntm_input_ids();
+
+/// NTM sub-net output node IDs (1: threat score).
+[[nodiscard]] std::vector<std::string> build_ntm_output_ids();
+
 } // namespace neuroflyer
