@@ -114,6 +114,7 @@ neuroflyer/
 │   │   ├── mrca_tracker.cpp      — Elite lineage tracking
 │   │   ├── sensor_engine.cpp     — Scroller sensor detection + input encoding + display helpers
 │   │   ├── arena_world.cpp       — ArenaWorld: single authoritative physics (movement, collisions, bullet lifecycle)
+│   │   ├── arena_tick.cpp        — tick_fighters_scripted() + tick_arena_with_leader(): centralized net execution
 │   │   ├── arena_session.cpp     — ArenaSession: scoring wrapper around ArenaWorld
 │   │   ├── arena_match.cpp       — Multi-generation arena match runner
 │   │   ├── arena_sensor.cpp      — Rotation-aware arena sensors + fighter input builder
@@ -365,6 +366,7 @@ A top-down 2D arena where teams of ships battle for territory. Each team has a h
 ### Architecture
 
 - **ArenaWorld** (`arena_world.h` / `arena_world.cpp`) — single source of truth for arena physics. Owns ships, bullets, towers, tokens, bases. `tick()` returns `TickEvents` reporting what happened (kills, hits, pickups, deaths). All arena-based game modes compose ArenaWorld.
+- **Arena Tick** (`arena_tick.h` / `arena_tick.cpp`) — centralized net execution. Two variants: `tick_fighters_scripted()` for drill modes (scripted squad leader inputs, one fighter net per ship) and `tick_arena_with_leader()` for arena/skirmish (learned NTM + squad leader + fighter pipeline, one shared net per team). Both build sensor input, run nets, decode output, apply actions, call `world.tick()`, and return `TickEvents`. Optional output parameters capture inputs for visualization.
 - **ArenaWorldConfig** (`arena_world.h`) — physics-only config: world size, team/squad/fighter counts, obstacle counts, base/bullet/ship params, boundary wrapping.
 - **ArenaConfig** (`arena_config.h`) — wraps `ArenaWorldConfig world` + game-mode fields: time limit, rounds per generation, fitness weights, sector grid params.
 - **ArenaSession** (`arena_session.h` / `arena_session.cpp`) — thin wrapper around ArenaWorld. Delegates physics to `world_`, processes `TickEvents` for scoring (survival, kills), checks end conditions (time limit, teams alive, bases alive).
@@ -672,6 +674,7 @@ All new UI features MUST use the 4-layer UI framework. Do NOT create standalone 
 - **ShipDesign per variant, not global** — sensor config lives on each saved variant, not on GameConfig. Editing one variant's sensors doesn't affect others.
 - **Shared library repos** — neuralnet and evolve are independent repos shared by EcoSim, NeuroFlyer, and AntSim
 - **ArenaWorld as single physics source of truth** — `ArenaWorld` owns all entities and runs the authoritative tick loop (movement, collisions, bullets). `ArenaSession`, `FighterDrillSession`, and `AttackRunSession` all compose `ArenaWorld` rather than duplicating physics. Game modes only handle scoring, phases, and end conditions. `tick()` returns `TickEvents` so game modes interpret events without touching physics internals.
+- **Centralized net execution in engine layer** — `tick_fighters_scripted()` and `tick_arena_with_leader()` in `arena_tick.h` are the single source of truth for running neural nets in arena-based modes. UI screens compute scripted squad leader inputs (drills) or pass learned nets (arena), then call the appropriate tick function. UI screens never call `net.forward()` directly (except FlySessionScreen which uses the scroller sensor system). SkirmishTournament and TeamSkirmishSession also use these shared functions.
 - **Velocity-based drill scoring** — drill phases score using per-tick `dot(velocity, desired_direction)`, not absolute position. Prevents a fighter's spawn position from unfairly affecting fitness.
 - **Rotated + non-rotated collision variants** — `collision.h` provides both `bullet_triangle_collision()` (scroller, ships face up) and `bullet_triangle_collision_rotated()` (arena, ships have facing direction). Both kept to avoid unnecessary trig in scroller mode.
 - **Hierarchical team brain** — arena teams use 3 co-evolved nets: NTM (threat scoring per nearby enemy), squad leader (tactical orders from macro state), fighter (sensorimotor control from sensors + squad orders). The NTM uses shared weights duplicated per nearby enemy with top-1 threat selection via `SectorGrid`.
