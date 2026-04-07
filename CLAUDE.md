@@ -80,8 +80,9 @@ neuroflyer/
 │   ├── evolution.h               — Individual (StructuredGenome), EvolutionConfig, population ops
 │   ├── renderer.h                — SDL2 split-screen renderer + deferred draw queue
 │   ├── sensor_engine.h           — Scroller sensor source of truth: query_sensor, build_ship_input, decode_output
-│   ├── arena_config.h            — ArenaConfig: world size, team count, towers, tokens, sector grid, fitness weights
-│   ├── arena_session.h           — ArenaSession: arena world state, tick loop, squad stats
+│   ├── arena_world.h             — ArenaWorld: unified physics layer (entities, tick, collisions, TickEvents), ArenaWorldConfig, SquadStats
+│   ├── arena_config.h            — ArenaConfig: ArenaWorldConfig world + game-mode fields (time limit, fitness weights)
+│   ├── arena_session.h           — ArenaSession: thin wrapper around ArenaWorld + scoring + end conditions
 │   ├── arena_match.h             — ArenaMatch: multi-generation match runner for team evolution
 │   ├── arena_sensor.h            — Arena sensor system: rotation-aware query_arena_sensor, build_arena_ship_input, ArenaQueryContext
 │   ├── fighter_drill_session.h   — FighterDrillSession, FighterDrillConfig, DrillPhase enum
@@ -112,7 +113,8 @@ neuroflyer/
 │   │   ├── genome_manager.cpp    — Filesystem ops + lineage.json + genomic_lineage.json
 │   │   ├── mrca_tracker.cpp      — Elite lineage tracking
 │   │   ├── sensor_engine.cpp     — Scroller sensor detection + input encoding + display helpers
-│   │   ├── arena_session.cpp     — Arena world tick loop, collision, squad stats
+│   │   ├── arena_world.cpp       — ArenaWorld: single authoritative physics (movement, collisions, bullet lifecycle)
+│   │   ├── arena_session.cpp     — ArenaSession: scoring wrapper around ArenaWorld
 │   │   ├── arena_match.cpp       — Multi-generation arena match runner
 │   │   ├── arena_sensor.cpp      — Rotation-aware arena sensors + fighter input builder
 │   │   ├── fighter_drill_session.cpp — Drill world simulation, phase scoring
@@ -362,8 +364,10 @@ A top-down 2D arena where teams of ships battle for territory. Each team has a h
 
 ### Architecture
 
-- **ArenaConfig** (`arena_config.h`) — world size, team count, towers, tokens, sector grid params, fitness weights, squad leader fighter input count.
-- **ArenaSession** (`arena_session.h` / `arena_session.cpp`) — arena world state: ships (Triangle with rotation), towers, tokens, bullets (directional with max range), bases (team starbases with health). Tick loop handles movement (thrust+rotation model), collision (rotated variants), bullet lifecycle, squad stats computation.
+- **ArenaWorld** (`arena_world.h` / `arena_world.cpp`) — single source of truth for arena physics. Owns ships, bullets, towers, tokens, bases. `tick()` returns `TickEvents` reporting what happened (kills, hits, pickups, deaths). All arena-based game modes compose ArenaWorld.
+- **ArenaWorldConfig** (`arena_world.h`) — physics-only config: world size, team/squad/fighter counts, obstacle counts, base/bullet/ship params, boundary wrapping.
+- **ArenaConfig** (`arena_config.h`) — wraps `ArenaWorldConfig world` + game-mode fields: time limit, rounds per generation, fitness weights, sector grid params.
+- **ArenaSession** (`arena_session.h` / `arena_session.cpp`) — thin wrapper around ArenaWorld. Delegates physics to `world_`, processes `TickEvents` for scoring (survival, kills), checks end conditions (time limit, teams alive, bases alive).
 - **ArenaMatch** (`arena_match.h` / `arena_match.cpp`) — multi-generation match runner. Pits team genomes against each other, runs ArenaSession ticks, assigns fitness via configurable weights.
 - **ArenaSensor** (`arena_sensor.h` / `arena_sensor.cpp`) — rotation-aware sensor system. See Sensor Engine section.
 - **SectorGrid** (`sector_grid.h` / `sector_grid.cpp`) — spatial index dividing the arena into sectors. Used by NTM to efficiently find nearby enemies within a Manhattan distance diamond.
@@ -667,7 +671,7 @@ All new UI features MUST use the 4-layer UI framework. Do NOT create standalone 
 - **Sensor engine as single source of truth** — one set of functions for detection, input encoding, and output decoding. No inline math in screens. Visual sorting via display permutation (doesn't affect functional data order).
 - **ShipDesign per variant, not global** — sensor config lives on each saved variant, not on GameConfig. Editing one variant's sensors doesn't affect others.
 - **Shared library repos** — neuralnet and evolve are independent repos shared by EcoSim, NeuroFlyer, and AntSim
-- **Duplicated arena physics in fighter drill** — `FighterDrillSession` duplicates collision and movement math from `ArenaSession` rather than extracting a shared module. Intentional scope decision to keep fighter drill self-contained.
+- **ArenaWorld as single physics source of truth** — `ArenaWorld` owns all entities and runs the authoritative tick loop (movement, collisions, bullets). `ArenaSession`, `FighterDrillSession`, and `AttackRunSession` all compose `ArenaWorld` rather than duplicating physics. Game modes only handle scoring, phases, and end conditions. `tick()` returns `TickEvents` so game modes interpret events without touching physics internals.
 - **Velocity-based drill scoring** — drill phases score using per-tick `dot(velocity, desired_direction)`, not absolute position. Prevents a fighter's spawn position from unfairly affecting fitness.
 - **Rotated + non-rotated collision variants** — `collision.h` provides both `bullet_triangle_collision()` (scroller, ships face up) and `bullet_triangle_collision_rotated()` (arena, ships have facing direction). Both kept to avoid unnecessary trig in scroller mode.
 - **Hierarchical team brain** — arena teams use 3 co-evolved nets: NTM (threat scoring per nearby enemy), squad leader (tactical orders from macro state), fighter (sensorimotor control from sensors + squad orders). The NTM uses shared weights duplicated per nearby enemy with top-1 threat selection via `SectorGrid`.
