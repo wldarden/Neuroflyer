@@ -1,6 +1,5 @@
 #include <neuroflyer/fighter_drill_session.h>
 
-#include <algorithm>
 #include <cmath>
 #include <numbers>
 
