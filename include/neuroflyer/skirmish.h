@@ -6,7 +6,6 @@
 #include <neuroflyer/team_evolution.h>
 #include <neuroflyer/ship_design.h>
 
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
