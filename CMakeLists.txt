@@ -125,6 +125,9 @@ add_executable(neuroflyer
     src/ui/screens/game/skirmish_config_screen.cpp
     src/ui/screens/game/skirmish_pause_screen.cpp
     src/ui/screens/game/fighter_drill_pause_screen.cpp
+    src/ui/screens/game/team_skirmish_config_screen.cpp
+    src/ui/screens/game/team_skirmish_screen.cpp
+    src/ui/screens/game/team_skirmish_pause_screen.cpp
     src/ui/screens/analysis/analysis.cpp
     src/ui/views/arena_config_view.cpp
     src/ui/views/arena_game_view.cpp

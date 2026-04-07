@@ -4,6 +4,7 @@
 #include <neuroflyer/ui/screens/fly_session_screen.h>
 #include <neuroflyer/ui/screens/hangar_screen.h>
 #include <neuroflyer/ui/screens/settings_screen.h>
+#include <neuroflyer/ui/screens/team_skirmish_config_screen.h>
 
 #include <imgui.h>
 
@@ -68,6 +69,12 @@ void MainMenuScreen::on_draw(AppState& state, Renderer& renderer,
     ImGui::SetCursorPosX(btn_x);
     if (ImGui::Button("Hangar", ImVec2(BTN_W, BTN_H))) {
         ui.push_screen(std::make_unique<HangarScreen>());
+    }
+
+    ImGui::Dummy(ImVec2(0, BTN_GAP));
+    ImGui::SetCursorPosX(btn_x);
+    if (ImGui::Button("Team Skirmish", ImVec2(BTN_W, BTN_H))) {
+        ui.push_screen(std::make_unique<TeamSkirmishConfigScreen>());
     }
 
     ImGui::Dummy(ImVec2(0, BTN_GAP));
