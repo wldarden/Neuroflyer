@@ -1,191 +1,15 @@
 #include <neuroflyer/skirmish_tournament.h>
-#include <neuroflyer/arena_sensor.h>
-#include <neuroflyer/sensor_engine.h>
+#include <neuroflyer/arena_tick.h>
 
 #include <algorithm>
 #include <cassert>
 #include <chrono>
-#include <cmath>
-#include <limits>
 
 namespace neuroflyer {
 
 // ── Shared helpers ─────────────────────────────────────────────────────────
 
 namespace {
-
-void tick_arena_match(
-    ArenaSession& arena,
-    const ArenaConfig& arena_config,
-    const ShipDesign& fighter_design,
-    std::vector<neuralnet::Network>& ntm_nets,
-    std::vector<neuralnet::Network>& leader_nets,
-    std::vector<neuralnet::Network>& fighter_nets,
-    std::vector<std::vector<float>>& recurrent_states,
-    const std::vector<int>& ship_teams,
-    std::vector<SquadLeaderFighterInputs>* out_sl_inputs,
-    std::vector<std::vector<float>>* out_leader_inputs = nullptr,
-    std::vector<std::vector<float>>* out_fighter_inputs = nullptr) {
-
-    const std::size_t total_ships = arena.ships().size();
-
-    SectorGrid grid(arena_config.world.world_width, arena_config.world.world_height,
-                    arena_config.sector_size);
-    for (std::size_t i = 0; i < total_ships; ++i) {
-        if (arena.ships()[i].alive) {
-            grid.insert(i, arena.ships()[i].x, arena.ships()[i].y);
-        }
-    }
-    for (std::size_t b = 0; b < arena.bases().size(); ++b) {
-        if (arena.bases()[b].alive()) {
-            grid.insert(total_ships + b, arena.bases()[b].x, arena.bases()[b].y);
-        }
-    }
-
-    constexpr std::size_t kNumTeams = 2;
-    std::vector<SquadLeaderOrder> team_orders(kNumTeams);
-    std::vector<float> squad_center_xs(kNumTeams, 0.0f);
-    std::vector<float> squad_center_ys(kNumTeams, 0.0f);
-
-    for (std::size_t t = 0; t < kNumTeams; ++t) {
-        const int team = static_cast<int>(t);
-        auto stats = arena.compute_squad_stats(team, 0);
-        squad_center_xs[t] = stats.centroid_x;
-        squad_center_ys[t] = stats.centroid_y;
-
-        auto threats = gather_near_threats(
-            grid, stats.centroid_x, stats.centroid_y,
-            arena_config.ntm_sector_radius, team,
-            arena.ships(), ship_teams, arena.bases());
-
-        auto ntm = run_ntm_threat_selection(
-            ntm_nets[t], stats.centroid_x, stats.centroid_y,
-            stats.alive_fraction, threats,
-            arena_config.world.world_width, arena_config.world.world_height);
-
-        const float own_base_x = arena.bases()[t].x;
-        const float own_base_y = arena.bases()[t].y;
-        const float own_base_hp = arena.bases()[t].hp_normalized();
-        float enemy_base_x = 0, enemy_base_y = 0;
-        float min_dist_sq = std::numeric_limits<float>::max();
-        for (const auto& base : arena.bases()) {
-            if (base.team_id == team) continue;
-            const float dx = stats.centroid_x - base.x;
-            const float dy = stats.centroid_y - base.y;
-            const float dsq = dx * dx + dy * dy;
-            if (dsq < min_dist_sq) {
-                min_dist_sq = dsq;
-                enemy_base_x = base.x;
-                enemy_base_y = base.y;
-            }
-        }
-
-        const float world_diag = std::sqrt(
-            arena_config.world.world_width * arena_config.world.world_width +
-            arena_config.world.world_height * arena_config.world.world_height);
-        const float home_dx = own_base_x - stats.centroid_x;
-        const float home_dy = own_base_y - stats.centroid_y;
-        const float home_dist_raw = std::sqrt(home_dx * home_dx + home_dy * home_dy);
-        const float home_distance = home_dist_raw / world_diag;
-        const float home_heading_sin = (home_dist_raw > 1e-6f) ? home_dx / home_dist_raw : 0.0f;
-        const float home_heading_cos = (home_dist_raw > 1e-6f) ? home_dy / home_dist_raw : 0.0f;
-        const float cmd_dx = enemy_base_x - stats.centroid_x;
-        const float cmd_dy = enemy_base_y - stats.centroid_y;
-        const float cmd_dist_raw = std::sqrt(cmd_dx * cmd_dx + cmd_dy * cmd_dy);
-        const float cmd_heading_sin = (cmd_dist_raw > 1e-6f) ? cmd_dx / cmd_dist_raw : 0.0f;
-        const float cmd_heading_cos = (cmd_dist_raw > 1e-6f) ? cmd_dy / cmd_dist_raw : 0.0f;
-        const float cmd_target_distance = cmd_dist_raw / world_diag;
-
-        float enemy_alive_frac = 0.0f;
-        std::size_t enemy_total = 0, enemy_alive = 0;
-        for (std::size_t si = 0; si < total_ships; ++si) {
-            if (ship_teams[si] != team) {
-                ++enemy_total;
-                if (arena.ships()[si].alive) ++enemy_alive;
-            }
-        }
-        if (enemy_total > 0) enemy_alive_frac = static_cast<float>(enemy_alive) / static_cast<float>(enemy_total);
-
-        float time_remaining = 1.0f - static_cast<float>(arena.current_tick()) /
-            static_cast<float>(std::max(arena_config.time_limit_ticks, 1u));
-
-        team_orders[t] = run_squad_leader(
-            leader_nets[t], stats.alive_fraction,
-            home_heading_sin, home_heading_cos, home_distance,
-            own_base_hp,
-            cmd_heading_sin, cmd_heading_cos, cmd_target_distance,
-            ntm, own_base_x, own_base_y, enemy_base_x, enemy_base_y,
-            enemy_alive_frac, time_remaining,
-            stats.centroid_x / arena_config.world.world_width,
-            stats.centroid_y / arena_config.world.world_height);
-
-        // Store squad leader net inputs for visualization
-        if (out_leader_inputs && t < out_leader_inputs->size()) {
-            (*out_leader_inputs)[t] = {
-                stats.alive_fraction,
-                home_heading_sin, home_heading_cos, home_distance,
-                own_base_hp,
-                cmd_heading_sin, cmd_heading_cos, cmd_target_distance,
-                ntm.active ? 1.0f : 0.0f,
-                ntm.heading_sin, ntm.heading_cos,
-                ntm.distance, ntm.threat_score,
-                enemy_alive_frac, time_remaining,
-                stats.centroid_x / arena_config.world.world_width,
-                stats.centroid_y / arena_config.world.world_height
-            };
-        }
-    }
-
-    for (std::size_t i = 0; i < total_ships; ++i) {
-        if (!arena.ships()[i].alive) continue;
-
-        const int team = ship_teams[i];
-        const auto t = static_cast<std::size_t>(team);
-
-        auto sl_inputs = compute_squad_leader_fighter_inputs(
-            arena.ships()[i].x, arena.ships()[i].y,
-            arena.ships()[i].rotation,
-            team_orders[t],
-            squad_center_xs[t], squad_center_ys[t],
-            arena_config.world.world_width, arena_config.world.world_height);
-
-        if (out_sl_inputs) {
-            (*out_sl_inputs)[i] = sl_inputs;
-        }
-
-        auto ctx = ArenaQueryContext::for_ship(
-            arena.ships()[i], i, team,
-            arena_config.world.world_width, arena_config.world.world_height,
-            arena.towers(), arena.tokens(),
-            arena.ships(), ship_teams, arena.bullets());
-
-        auto input = build_arena_ship_input(
-            fighter_design, ctx,
-            sl_inputs.squad_target_heading, sl_inputs.squad_target_distance,
-            sl_inputs.squad_center_heading, sl_inputs.squad_center_distance,
-            sl_inputs.aggression, sl_inputs.spacing,
-            recurrent_states[i]);
-
-        // Store fighter input for visualization
-        if (out_fighter_inputs && i < out_fighter_inputs->size()) {
-            (*out_fighter_inputs)[i] = input;
-        }
-
-        auto output = fighter_nets[t].forward(
-            std::span<const float>(input));
-
-        auto decoded = decode_output(
-            std::span<const float>(output),
-            fighter_design.memory_slots);
-
-        arena.set_ship_actions(i,
-            decoded.up, decoded.down, decoded.left, decoded.right, decoded.shoot);
-
-        recurrent_states[i] = decoded.memory;
-    }
-
-    arena.tick();
-}
 
 void score_match(
     const ArenaSession& arena,
@@ -452,9 +276,14 @@ void SkirmishTournament::drain_background() {
             }
             start_bg_match();
         }
-        tick_arena_match(*bg_arena_, bg_arena_config_, fighter_design_,
-                         bg_ntm_nets_, bg_leader_nets_, bg_fighter_nets_,
-                         bg_recurrent_states_, bg_ship_teams_, nullptr);
+        auto events = tick_arena_with_leader(
+            bg_arena_->world(), bg_arena_config_.world, fighter_design_,
+            bg_ntm_nets_, bg_leader_nets_, bg_fighter_nets_,
+            bg_recurrent_states_, bg_ship_teams_,
+            bg_arena_config_.time_limit_ticks,
+            bg_arena_config_.ntm_sector_radius,
+            bg_arena_config_.sector_size);
+        bg_arena_->process_tick_events(events);
         if (bg_arena_->is_over()) {
             finish_bg_match();
         }
@@ -513,10 +342,15 @@ void SkirmishTournament::start_match() {
 
 void SkirmishTournament::run_tick() {
     assert(arena_);
-    tick_arena_match(*arena_, arena_config_, fighter_design_,
-                     ntm_nets_, leader_nets_, fighter_nets_,
-                     recurrent_states_, ship_teams_, &last_sl_inputs_,
-                     &last_leader_inputs_, &last_fighter_inputs_);
+    auto events = tick_arena_with_leader(
+        arena_->world(), arena_config_.world, fighter_design_,
+        ntm_nets_, leader_nets_, fighter_nets_,
+        recurrent_states_, ship_teams_,
+        arena_config_.time_limit_ticks,
+        arena_config_.ntm_sector_radius,
+        arena_config_.sector_size,
+        &last_sl_inputs_, &last_leader_inputs_, &last_fighter_inputs_);
+    arena_->process_tick_events(events);
 }
 
 void SkirmishTournament::finish_match() {
@@ -632,9 +466,14 @@ void SkirmishTournament::run_background_work(int budget_ms) {
             start_bg_match();
         }
 
-        tick_arena_match(*bg_arena_, bg_arena_config_, fighter_design_,
-                         bg_ntm_nets_, bg_leader_nets_, bg_fighter_nets_,
-                         bg_recurrent_states_, bg_ship_teams_, nullptr);
+        auto events = tick_arena_with_leader(
+            bg_arena_->world(), bg_arena_config_.world, fighter_design_,
+            bg_ntm_nets_, bg_leader_nets_, bg_fighter_nets_,
+            bg_recurrent_states_, bg_ship_teams_,
+            bg_arena_config_.time_limit_ticks,
+            bg_arena_config_.ntm_sector_radius,
+            bg_arena_config_.sector_size);
+        bg_arena_->process_tick_events(events);
 
         if (bg_arena_->is_over()) {
             finish_bg_match();
