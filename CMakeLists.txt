@@ -68,6 +68,7 @@ add_executable(neuroflyer
     # Engine — pure logic, no SDL/ImGui
     src/engine/game.cpp
     src/engine/arena_session.cpp
+    src/engine/arena_world.cpp
     src/engine/evolution.cpp
     src/engine/config.cpp
     src/engine/snapshot_io.cpp

@@ -24,8 +24,10 @@ add_executable(neuroflyer_tests
     skirmish_test.cpp
     skirmish_tournament_test.cpp
     team_skirmish_test.cpp
+    arena_world_test.cpp
     ../src/engine/game.cpp
     ../src/engine/arena_session.cpp
+    ../src/engine/arena_world.cpp
     ../src/engine/ray.cpp
     ../src/engine/sensor_engine.cpp
     ../src/engine/evolution.cpp
