@@ -33,7 +33,7 @@ struct SkirmishConfig {
     float sector_size = 2000.0f;
     int ntm_sector_radius = 2;
     float kill_points = 100.0f;
-    float death_points = 20.0f;
+    float death_points = 100.0f;
     float base_hit_points = 10.0f;  // per bullet hit on enemy base (kill_points / 10)
 
     /// Points awarded for destroying an enemy base: kill_points * total fighters per team.
@@ -46,22 +46,22 @@ struct SkirmishConfig {
     /// Convert to ArenaConfig for use with ArenaSession.
     [[nodiscard]] ArenaConfig to_arena_config() const noexcept {
         ArenaConfig ac;
-        ac.world_width = world_width;
-        ac.world_height = world_height;
-        ac.num_teams = 2;  // caller overrides from teams.size()
-        ac.num_squads = num_squads_per_team;
-        ac.fighters_per_squad = fighters_per_squad;
-        ac.tower_count = tower_count;
-        ac.token_count = token_count;
+        ac.world.world_width = world_width;
+        ac.world.world_height = world_height;
+        ac.world.num_teams = 2;  // caller overrides from teams.size()
+        ac.world.num_squads = num_squads_per_team;
+        ac.world.fighters_per_squad = fighters_per_squad;
+        ac.world.tower_count = tower_count;
+        ac.world.token_count = token_count;
         ac.time_limit_ticks = time_limit_ticks;
-        ac.base_hp = base_hp;
-        ac.base_radius = base_radius;
-        ac.base_bullet_damage = base_bullet_damage;
-        ac.rotation_speed = rotation_speed;
-        ac.bullet_max_range = bullet_max_range;
-        ac.wrap_ns = wrap_ns;
-        ac.wrap_ew = wrap_ew;
-        ac.friendly_fire = friendly_fire;
+        ac.world.base_hp = base_hp;
+        ac.world.base_radius = base_radius;
+        ac.world.base_bullet_damage = base_bullet_damage;
+        ac.world.rotation_speed = rotation_speed;
+        ac.world.bullet_max_range = bullet_max_range;
+        ac.world.wrap_ns = wrap_ns;
+        ac.world.wrap_ew = wrap_ew;
+        ac.world.friendly_fire = friendly_fire;
         ac.sector_size = sector_size;
         ac.ntm_sector_radius = ntm_sector_radius;
         ac.rounds_per_generation = 1;

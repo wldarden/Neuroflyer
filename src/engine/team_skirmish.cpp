@@ -32,7 +32,7 @@ void tick_team_arena_match(
     const std::size_t num_teams = team_ntm_nets.size();
 
     // Build sector grid
-    SectorGrid grid(arena_config.world_width, arena_config.world_height,
+    SectorGrid grid(arena_config.world.world_width, arena_config.world.world_height,
                     arena_config.sector_size);
     for (std::size_t i = 0; i < total_ships; ++i) {
         if (arena.ships()[i].alive) {
@@ -72,7 +72,7 @@ void tick_team_arena_match(
             auto ntm = run_ntm_threat_selection(
                 team_ntm_nets[t][sq], stats.centroid_x, stats.centroid_y,
                 stats.alive_fraction, threats,
-                arena_config.world_width, arena_config.world_height);
+                arena_config.world.world_width, arena_config.world.world_height);
 
             // Find own base and nearest enemy base
             const float own_base_x = arena.bases()[t].x;
@@ -93,8 +93,8 @@ void tick_team_arena_match(
             }
 
             const float world_diag = std::sqrt(
-                arena_config.world_width * arena_config.world_width +
-                arena_config.world_height * arena_config.world_height);
+                arena_config.world.world_width * arena_config.world.world_width +
+                arena_config.world.world_height * arena_config.world.world_height);
             const float home_dx = own_base_x - stats.centroid_x;
             const float home_dy = own_base_y - stats.centroid_y;
             const float home_dist_raw = std::sqrt(home_dx * home_dx + home_dy * home_dy);
@@ -131,8 +131,8 @@ void tick_team_arena_match(
                 cmd_heading_sin, cmd_heading_cos, cmd_target_distance,
                 ntm, own_base_x, own_base_y, enemy_base_x, enemy_base_y,
                 enemy_alive_frac, time_remaining,
-                stats.centroid_x / arena_config.world_width,
-                stats.centroid_y / arena_config.world_height);
+                stats.centroid_x / arena_config.world.world_width,
+                stats.centroid_y / arena_config.world.world_height);
 
             // Store leader inputs for visualization
             if (out_leader_inputs) {
@@ -147,8 +147,8 @@ void tick_team_arena_match(
                         ntm.heading_sin, ntm.heading_cos,
                         ntm.distance, ntm.threat_score,
                         enemy_alive_frac, time_remaining,
-                        stats.centroid_x / arena_config.world_width,
-                        stats.centroid_y / arena_config.world_height
+                        stats.centroid_x / arena_config.world.world_width,
+                        stats.centroid_y / arena_config.world.world_height
                     };
                 }
             }
@@ -195,7 +195,7 @@ void tick_team_arena_match(
             team_squad_orders[local_team][sq],
             squad_center_xs[local_team][sq],
             squad_center_ys[local_team][sq],
-            arena_config.world_width, arena_config.world_height);
+            arena_config.world.world_width, arena_config.world.world_height);
 
         if (out_sl_inputs) {
             (*out_sl_inputs)[i] = sl_inputs;
@@ -203,7 +203,7 @@ void tick_team_arena_match(
 
         auto ctx = ArenaQueryContext::for_ship(
             arena.ships()[i], i, team,
-            arena_config.world_width, arena_config.world_height,
+            arena_config.world.world_width, arena_config.world.world_height,
             arena.towers(), arena.tokens(),
             arena.ships(), ship_teams, arena.bullets());
 
@@ -249,7 +249,7 @@ TeamSkirmishMatchResult run_team_skirmish_match(
     const std::size_t num_teams = team_pools.size();
 
     ArenaConfig arena_config = config.to_arena_config();
-    arena_config.num_teams = num_teams;
+    arena_config.world.num_teams = num_teams;
 
     ArenaSession arena(arena_config, seed);
 
@@ -418,7 +418,7 @@ void TeamSkirmishSession::build_schedule() {
 
 void TeamSkirmishSession::start_match(const std::vector<std::size_t>& match_teams) {
     arena_config_ = config_.arena.to_arena_config();
-    arena_config_.num_teams = match_teams.size();
+    arena_config_.world.num_teams = match_teams.size();
 
     arena_ = std::make_unique<ArenaSession>(arena_config_,
                                              static_cast<uint32_t>(rng_()));

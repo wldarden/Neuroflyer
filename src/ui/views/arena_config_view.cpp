@@ -17,19 +17,19 @@ bool draw_arena_config_view(ArenaConfig& config) {
     // --- Teams ---
     ui::section_header("Teams");
 
-    int num_teams = static_cast<int>(config.num_teams);
+    int num_teams = static_cast<int>(config.world.num_teams);
     if (ui::input_int("Number of Teams", &num_teams, 2, 8)) {
-        config.num_teams = static_cast<std::size_t>(num_teams);
+        config.world.num_teams = static_cast<std::size_t>(num_teams);
     }
 
-    int num_squads = static_cast<int>(config.num_squads);
+    int num_squads = static_cast<int>(config.world.num_squads);
     if (ui::input_int("Squads per Team", &num_squads, 1, 10)) {
-        config.num_squads = static_cast<std::size_t>(num_squads);
+        config.world.num_squads = static_cast<std::size_t>(num_squads);
     }
 
-    int fighters_per_squad = static_cast<int>(config.fighters_per_squad);
+    int fighters_per_squad = static_cast<int>(config.world.fighters_per_squad);
     if (ui::input_int("Fighters per Squad", &fighters_per_squad, 4, 32)) {
-        config.fighters_per_squad = static_cast<std::size_t>(fighters_per_squad);
+        config.world.fighters_per_squad = static_cast<std::size_t>(fighters_per_squad);
     }
 
     ImGui::TextDisabled("Squad Leader Fighter Inputs: %zu",
@@ -42,22 +42,22 @@ bool draw_arena_config_view(ArenaConfig& config) {
     // --- World ---
     ui::section_header("World");
 
-    float world_w = config.world_width;
+    float world_w = config.world.world_width;
     if (ui::slider_float("World Width", &world_w, 2000.0f, 200000.0f)) {
-        config.world_width = world_w;
+        config.world.world_width = world_w;
     }
 
-    float world_h = config.world_height;
+    float world_h = config.world.world_height;
     if (ui::slider_float("World Height", &world_h, 2000.0f, 200000.0f)) {
-        config.world_height = world_h;
+        config.world.world_height = world_h;
     }
     ImGui::Spacing();
 
     // --- Boundaries ---
     ui::section_header("Boundaries");
 
-    ui::checkbox("Wrap North/South", &config.wrap_ns);
-    ui::checkbox("Wrap East/West", &config.wrap_ew);
+    ui::checkbox("Wrap North/South", &config.world.wrap_ns);
+    ui::checkbox("Wrap East/West", &config.world.wrap_ew);
     ImGui::Spacing();
 
     // --- Round ---
@@ -78,30 +78,30 @@ bool draw_arena_config_view(ArenaConfig& config) {
     // --- Obstacles ---
     ui::section_header("Obstacles");
 
-    int towers = static_cast<int>(config.tower_count);
+    int towers = static_cast<int>(config.world.tower_count);
     if (ui::input_int("Tower Count", &towers, 0, 1000)) {
-        config.tower_count = static_cast<std::size_t>(towers);
+        config.world.tower_count = static_cast<std::size_t>(towers);
     }
 
-    int tokens = static_cast<int>(config.token_count);
+    int tokens = static_cast<int>(config.world.token_count);
     if (ui::input_int("Token Count", &tokens, 0, 1000)) {
-        config.token_count = static_cast<std::size_t>(tokens);
+        config.world.token_count = static_cast<std::size_t>(tokens);
     }
     ImGui::Spacing();
 
     // --- Combat ---
     ui::section_header("Combat");
 
-    ui::slider_float("Bullet Max Range", &config.bullet_max_range, 100.0f, 5000.0f);
-    ui::slider_float("Rotation Speed", &config.rotation_speed, 0.01f, 0.2f);
+    ui::slider_float("Bullet Max Range", &config.world.bullet_max_range, 100.0f, 5000.0f);
+    ui::slider_float("Rotation Speed", &config.world.rotation_speed, 0.01f, 0.2f);
     ImGui::Spacing();
 
     // --- Base ---
     ui::section_header("Base");
 
-    ui::slider_float("Base HP", &config.base_hp, 100.0f, 5000.0f);
-    ui::slider_float("Base Radius", &config.base_radius, 50.0f, 200.0f);
-    ui::slider_float("Base Bullet Damage", &config.base_bullet_damage, 1.0f, 100.0f);
+    ui::slider_float("Base HP", &config.world.base_hp, 100.0f, 5000.0f);
+    ui::slider_float("Base Radius", &config.world.base_radius, 50.0f, 200.0f);
+    ui::slider_float("Base Bullet Damage", &config.world.base_bullet_damage, 1.0f, 100.0f);
     ImGui::Spacing();
 
     // --- Fitness Weights ---

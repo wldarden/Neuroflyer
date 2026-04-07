@@ -17,12 +17,12 @@ SkirmishMatchResult run_skirmish_match(
 
     // Build ArenaConfig from SkirmishConfig, override num_teams from teams.size()
     ArenaConfig arena_config = config.to_arena_config();
-    arena_config.num_teams = teams.size();
+    arena_config.world.num_teams = teams.size();
 
     assert(teams.size() >= 2);
 
     SkirmishMatchResult result;
-    result.team_scores.resize(arena_config.num_teams, 0.0f);
+    result.team_scores.resize(arena_config.world.num_teams, 0.0f);
 
     // (a) Create arena session
     ArenaSession arena(arena_config, seed);
@@ -31,11 +31,11 @@ SkirmishMatchResult run_skirmish_match(
     std::vector<neuralnet::Network> ntm_nets;
     std::vector<neuralnet::Network> leader_nets;
     std::vector<neuralnet::Network> fighter_nets;
-    ntm_nets.reserve(arena_config.num_teams);
-    leader_nets.reserve(arena_config.num_teams);
-    fighter_nets.reserve(arena_config.num_teams);
+    ntm_nets.reserve(arena_config.world.num_teams);
+    leader_nets.reserve(arena_config.world.num_teams);
+    fighter_nets.reserve(arena_config.world.num_teams);
 
-    for (std::size_t t = 0; t < arena_config.num_teams; ++t) {
+    for (std::size_t t = 0; t < arena_config.world.num_teams; ++t) {
         ntm_nets.push_back(teams[t].build_ntm_network());
         leader_nets.push_back(teams[t].build_squad_network());
         fighter_nets.push_back(teams[t].build_fighter_network());
@@ -55,7 +55,7 @@ SkirmishMatchResult run_skirmish_match(
     // (e) Main loop — identical to run_arena_match()
     while (!arena.is_over()) {
         // Build sector grid for this tick
-        SectorGrid grid(arena_config.world_width, arena_config.world_height,
+        SectorGrid grid(arena_config.world.world_width, arena_config.world.world_height,
                         arena_config.sector_size);
         // Insert alive ships
         for (std::size_t i = 0; i < total_ships; ++i) {
@@ -71,11 +71,11 @@ SkirmishMatchResult run_skirmish_match(
         }
 
         // Per team: run NTM + squad leader -> SquadLeaderOrder
-        std::vector<SquadLeaderOrder> team_orders(arena_config.num_teams);
-        std::vector<float> squad_center_xs(arena_config.num_teams, 0.0f);
-        std::vector<float> squad_center_ys(arena_config.num_teams, 0.0f);
+        std::vector<SquadLeaderOrder> team_orders(arena_config.world.num_teams);
+        std::vector<float> squad_center_xs(arena_config.world.num_teams, 0.0f);
+        std::vector<float> squad_center_ys(arena_config.world.num_teams, 0.0f);
 
-        for (std::size_t t = 0; t < arena_config.num_teams; ++t) {
+        for (std::size_t t = 0; t < arena_config.world.num_teams; ++t) {
             const int team = static_cast<int>(t);
             auto stats = arena.compute_squad_stats(team, 0);
             squad_center_xs[t] = stats.centroid_x;
@@ -89,7 +89,7 @@ SkirmishMatchResult run_skirmish_match(
             auto ntm = run_ntm_threat_selection(
                 ntm_nets[t], stats.centroid_x, stats.centroid_y,
                 stats.alive_fraction, threats,
-                arena_config.world_width, arena_config.world_height);
+                arena_config.world.world_width, arena_config.world.world_height);
 
             // Find bases
             const float own_base_x = arena.bases()[t].x;
@@ -111,8 +111,8 @@ SkirmishMatchResult run_skirmish_match(
 
             // Compute squad leader inputs
             const float world_diag = std::sqrt(
-                arena_config.world_width * arena_config.world_width +
-                arena_config.world_height * arena_config.world_height);
+                arena_config.world.world_width * arena_config.world.world_width +
+                arena_config.world.world_height * arena_config.world.world_height);
             const float home_dx = own_base_x - stats.centroid_x;
             const float home_dy = own_base_y - stats.centroid_y;
             const float home_dist_raw = std::sqrt(home_dx * home_dx + home_dy * home_dy);
@@ -126,12 +126,28 @@ SkirmishMatchResult run_skirmish_match(
             const float cmd_heading_cos = (cmd_dist_raw > 1e-6f) ? cmd_dy / cmd_dist_raw : 0.0f;
             const float cmd_target_distance = cmd_dist_raw / world_diag;
 
+            float enemy_alive_frac = 0.0f;
+            std::size_t enemy_total = 0, enemy_alive = 0;
+            for (std::size_t si = 0; si < total_ships; ++si) {
+                if (ship_teams[si] != team) {
+                    ++enemy_total;
+                    if (arena.ships()[si].alive) ++enemy_alive;
+                }
+            }
+            if (enemy_total > 0) enemy_alive_frac = static_cast<float>(enemy_alive) / static_cast<float>(enemy_total);
+
+            float time_remaining = 1.0f - static_cast<float>(arena.current_tick()) /
+                static_cast<float>(std::max(arena_config.time_limit_ticks, 1u));
+
             team_orders[t] = run_squad_leader(
                 leader_nets[t], stats.alive_fraction,
                 home_heading_sin, home_heading_cos, home_distance,
-                own_base_hp, stats.squad_spacing,
+                own_base_hp,
                 cmd_heading_sin, cmd_heading_cos, cmd_target_distance,
-                ntm, own_base_x, own_base_y, enemy_base_x, enemy_base_y);
+                ntm, own_base_x, own_base_y, enemy_base_x, enemy_base_y,
+                enemy_alive_frac, time_remaining,
+                stats.centroid_x / arena_config.world.world_width,
+                stats.centroid_y / arena_config.world.world_height);
         }
 
         // For each alive ship: build input, run fighter net, decode output, set actions
@@ -147,12 +163,12 @@ SkirmishMatchResult run_skirmish_match(
                 arena.ships()[i].rotation,
                 team_orders[t],
                 squad_center_xs[t], squad_center_ys[t],
-                arena_config.world_width, arena_config.world_height);
+                arena_config.world.world_width, arena_config.world.world_height);
 
             // Build ArenaQueryContext
             auto ctx = ArenaQueryContext::for_ship(
                 arena.ships()[i], i, team,
-                arena_config.world_width, arena_config.world_height,
+                arena_config.world.world_width, arena_config.world.world_height,
                 arena.towers(), arena.tokens(),
                 arena.ships(), ship_teams, arena.bullets());
 
@@ -189,7 +205,7 @@ SkirmishMatchResult run_skirmish_match(
     result.completed = true;
 
     // (f) Compute kill-based team scores
-    const auto num_teams = arena_config.num_teams;
+    const auto num_teams = arena_config.world.num_teams;
     const auto& kills = arena.enemy_kills();
 
     for (std::size_t t = 0; t < num_teams; ++t) {
@@ -203,11 +219,26 @@ SkirmishMatchResult run_skirmish_match(
             }
         }
 
-        // +base_kill_points() for each enemy base destroyed
         for (const auto& base : arena.bases()) {
-            if (base.team_id == team) continue;
-            if (!base.alive()) {
-                score += config.base_kill_points();
+            float damage_dealt = base.max_hp - base.hp;
+            if (base.team_id == team) {
+                // Penalty for damage taken on own base
+                if (damage_dealt > 0.0f && config.base_bullet_damage > 0.0f) {
+                    float hits = damage_dealt / config.base_bullet_damage;
+                    score -= config.base_hit_points * hits;
+                }
+                if (!base.alive()) {
+                    score -= config.base_kill_points();
+                }
+            } else {
+                // Reward for damage dealt to enemy base
+                if (damage_dealt > 0.0f && config.base_bullet_damage > 0.0f) {
+                    float hits = damage_dealt / config.base_bullet_damage;
+                    score += config.base_hit_points * hits;
+                }
+                if (!base.alive()) {
+                    score += config.base_kill_points();
+                }
             }
         }
 

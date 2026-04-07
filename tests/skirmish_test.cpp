@@ -36,7 +36,7 @@ TEST_F(SkirmishConfigTest, Defaults) {
     EXPECT_EQ(config.population_size, 20u);
     EXPECT_EQ(config.seeds_per_match, 3u);
     EXPECT_FLOAT_EQ(config.kill_points, 100.0f);
-    EXPECT_FLOAT_EQ(config.death_points, 20.0f);
+    EXPECT_FLOAT_EQ(config.death_points, 100.0f);
     EXPECT_EQ(config.fighters_per_squad, 8u);
     EXPECT_EQ(config.time_limit_ticks, 3600u);
 }
@@ -59,17 +59,17 @@ TEST_F(SkirmishConfigTest, ToArenaConfig) {
 
     const auto ac = config.to_arena_config();
 
-    EXPECT_FLOAT_EQ(ac.world_width, 2000.0f);
-    EXPECT_FLOAT_EQ(ac.world_height, 2000.0f);
-    EXPECT_EQ(ac.fighters_per_squad, 4u);
-    EXPECT_EQ(ac.tower_count, 10u);
-    EXPECT_EQ(ac.num_teams, 2u);
-    EXPECT_FLOAT_EQ(ac.base_hp, config.base_hp);
-    EXPECT_FLOAT_EQ(ac.base_radius, config.base_radius);
-    EXPECT_FLOAT_EQ(ac.rotation_speed, config.rotation_speed);
-    EXPECT_FLOAT_EQ(ac.bullet_max_range, config.bullet_max_range);
-    EXPECT_EQ(ac.wrap_ns, config.wrap_ns);
-    EXPECT_EQ(ac.wrap_ew, config.wrap_ew);
+    EXPECT_FLOAT_EQ(ac.world.world_width, 2000.0f);
+    EXPECT_FLOAT_EQ(ac.world.world_height, 2000.0f);
+    EXPECT_EQ(ac.world.fighters_per_squad, 4u);
+    EXPECT_EQ(ac.world.tower_count, 10u);
+    EXPECT_EQ(ac.world.num_teams, 2u);
+    EXPECT_FLOAT_EQ(ac.world.base_hp, config.base_hp);
+    EXPECT_FLOAT_EQ(ac.world.base_radius, config.base_radius);
+    EXPECT_FLOAT_EQ(ac.world.rotation_speed, config.rotation_speed);
+    EXPECT_FLOAT_EQ(ac.world.bullet_max_range, config.bullet_max_range);
+    EXPECT_EQ(ac.world.wrap_ns, config.wrap_ns);
+    EXPECT_EQ(ac.world.wrap_ew, config.wrap_ew);
     EXPECT_FLOAT_EQ(ac.sector_size, config.sector_size);
     EXPECT_EQ(ac.ntm_sector_radius, config.ntm_sector_radius);
     EXPECT_EQ(ac.rounds_per_generation, 1u);
