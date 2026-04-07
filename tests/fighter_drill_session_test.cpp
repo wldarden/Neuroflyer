@@ -10,11 +10,11 @@ namespace nf = neuroflyer;
 
 TEST(FighterDrillConfigTest, Defaults) {
     nf::FighterDrillConfig config;
-    EXPECT_FLOAT_EQ(config.world_width, 4000.0f);
-    EXPECT_FLOAT_EQ(config.world_height, 4000.0f);
+    EXPECT_FLOAT_EQ(config.world.world_width, 4000.0f);
+    EXPECT_FLOAT_EQ(config.world.world_height, 4000.0f);
     EXPECT_EQ(config.population_size, 200u);
-    EXPECT_EQ(config.tower_count, 50u);
-    EXPECT_EQ(config.token_count, 30u);
+    EXPECT_EQ(config.world.tower_count, 50u);
+    EXPECT_EQ(config.world.token_count, 30u);
     EXPECT_FLOAT_EQ(config.starbase_distance, 1500.0f);
     EXPECT_EQ(config.phase_duration_ticks, 1200u);
     EXPECT_FLOAT_EQ(config.attack_hit_bonus, 500.0f);
@@ -33,8 +33,8 @@ TEST(FighterDrillConfigTest, DrillPhaseEnum) {
 TEST(FighterDrillSessionTest, Construction) {
     nf::FighterDrillConfig config;
     config.population_size = 20;
-    config.tower_count = 10;
-    config.token_count = 5;
+    config.world.tower_count = 10;
+    config.world.token_count = 5;
     nf::FighterDrillSession session(config, 42);
 
     EXPECT_EQ(session.ships().size(), 20u);
@@ -51,8 +51,8 @@ TEST(FighterDrillSessionTest, ShipsSpawnAtCenter) {
     config.population_size = 50;
     nf::FighterDrillSession session(config, 42);
 
-    float center_x = config.world_width / 2.0f;
-    float center_y = config.world_height / 2.0f;
+    float center_x = config.world.world_width / 2.0f;
+    float center_y = config.world.world_height / 2.0f;
 
     for (const auto& ship : session.ships()) {
         EXPECT_NEAR(ship.x, center_x, 1.0f);
@@ -65,8 +65,8 @@ TEST(FighterDrillSessionTest, StarbaseAtExpectedDistance) {
     config.starbase_distance = 1500.0f;
     nf::FighterDrillSession session(config, 42);
 
-    float center_x = config.world_width / 2.0f;
-    float center_y = config.world_height / 2.0f;
+    float center_x = config.world.world_width / 2.0f;
+    float center_y = config.world.world_height / 2.0f;
     float dx = session.starbase().x - center_x;
     float dy = session.starbase().y - center_y;
     float dist = std::sqrt(dx * dx + dy * dy);
@@ -90,8 +90,8 @@ TEST(FighterDrillSessionTest, ScoresInitializedToZero) {
 TEST(FighterDrillSessionTest, ShipMovesOnThrust) {
     nf::FighterDrillConfig config;
     config.population_size = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     nf::FighterDrillSession session(config, 42);
 
     auto& ship = session.ships()[0];
@@ -106,11 +106,11 @@ TEST(FighterDrillSessionTest, ShipMovesOnThrust) {
 
 TEST(FighterDrillSessionTest, WorldWrapping) {
     nf::FighterDrillConfig config;
-    config.world_width = 100.0f;
-    config.world_height = 100.0f;
+    config.world.world_width = 100.0f;
+    config.world.world_height = 100.0f;
     config.population_size = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     nf::FighterDrillSession session(config, 42);
 
     auto& ship = session.ships()[0];
@@ -127,8 +127,8 @@ TEST(FighterDrillSessionTest, WorldWrapping) {
 TEST(FighterDrillSessionTest, BulletSpawnsOnShoot) {
     nf::FighterDrillConfig config;
     config.population_size = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     nf::FighterDrillSession session(config, 42);
 
     EXPECT_EQ(session.bullets().size(), 0u);
@@ -141,11 +141,11 @@ TEST(FighterDrillSessionTest, BulletSpawnsOnShoot) {
 TEST(FighterDrillSessionTest, BulletDiesAtMaxRange) {
     nf::FighterDrillConfig config;
     config.population_size = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
-    config.bullet_max_range = 50.0f;
-    config.world_width = 10000.0f;
-    config.world_height = 10000.0f;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
+    config.world.bullet_max_range = 50.0f;
+    config.world.world_width = 10000.0f;
+    config.world.world_height = 10000.0f;
     nf::FighterDrillSession session(config, 42);
 
     session.set_ship_actions(0, false, false, false, false, true);
@@ -161,8 +161,8 @@ TEST(FighterDrillSessionTest, BulletDiesAtMaxRange) {
 TEST(FighterDrillSessionTest, ShipDiesOnTowerCollision) {
     nf::FighterDrillConfig config;
     config.population_size = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     nf::FighterDrillSession session(config, 42);
 
     auto& ship = session.ships()[0];
@@ -174,10 +174,10 @@ TEST(FighterDrillSessionTest, ShipDiesOnTowerCollision) {
 TEST(FighterDrillSessionTest, TokenCollectionWorks) {
     nf::FighterDrillConfig config;
     config.population_size = 1;
-    config.tower_count = 0;
-    config.token_count = 1;
-    config.world_width = 100.0f;
-    config.world_height = 100.0f;
+    config.world.tower_count = 0;
+    config.world.token_count = 1;
+    config.world.world_width = 100.0f;
+    config.world.world_height = 100.0f;
     nf::FighterDrillSession session(config, 42);
 
     auto& ship = session.ships()[0];
@@ -191,8 +191,8 @@ TEST(FighterDrillSessionTest, TokenCollectionWorks) {
 TEST(FighterDrillSessionTest, BulletDamagesStarbase) {
     nf::FighterDrillConfig config;
     config.population_size = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.starbase_hp = 100.0f;
     config.base_bullet_damage = 10.0f;
     config.starbase_distance = 50.0f;
@@ -217,8 +217,8 @@ TEST(FighterDrillSessionTest, BulletDamagesStarbase) {
 TEST(FighterDrillSessionTest, PhaseTransitions) {
     nf::FighterDrillConfig config;
     config.population_size = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.phase_duration_ticks = 10;
     nf::FighterDrillSession session(config, 42);
 
@@ -239,8 +239,8 @@ TEST(FighterDrillSessionTest, PhaseTransitions) {
 TEST(FighterDrillSessionTest, TotalTicksThreePhases) {
     nf::FighterDrillConfig config;
     config.population_size = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.phase_duration_ticks = 10;
     nf::FighterDrillSession session(config, 42);
 
@@ -252,21 +252,21 @@ TEST(FighterDrillSessionTest, TotalTicksThreePhases) {
 TEST(FighterDrillSessionTest, ExpandPhaseRewardsMovingAway) {
     nf::FighterDrillConfig config;
     config.population_size = 2;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.phase_duration_ticks = 5;
     nf::FighterDrillSession session(config, 42);
 
     auto& ship0 = session.ships()[0];
     auto& ship1 = session.ships()[1];
 
-    float cx = config.world_width / 2.0f;
+    float cx = config.world.world_width / 2.0f;
     ship0.x = cx + 100.0f;
-    ship0.y = config.world_height / 2.0f;
+    ship0.y = config.world.world_height / 2.0f;
     ship0.rotation = std::numbers::pi_v<float> / 2.0f;  // facing right (away)
 
     ship1.x = cx + 100.0f;
-    ship1.y = config.world_height / 2.0f;
+    ship1.y = config.world.world_height / 2.0f;
     ship1.rotation = -std::numbers::pi_v<float> / 2.0f;  // facing left (toward)
 
     for (int i = 0; i < 5; ++i) {
@@ -284,8 +284,8 @@ TEST(FighterDrillSessionTest, ExpandPhaseRewardsMovingAway) {
 TEST(FighterDrillSessionTest, ContractPhaseRewardsMovingToward) {
     nf::FighterDrillConfig config;
     config.population_size = 2;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.phase_duration_ticks = 5;
     nf::FighterDrillSession session(config, 42);
 
@@ -295,13 +295,13 @@ TEST(FighterDrillSessionTest, ContractPhaseRewardsMovingToward) {
     auto& ship0 = session.ships()[0];
     auto& ship1 = session.ships()[1];
 
-    float cx = config.world_width / 2.0f;
+    float cx = config.world.world_width / 2.0f;
     ship0.x = cx + 100.0f;
-    ship0.y = config.world_height / 2.0f;
+    ship0.y = config.world.world_height / 2.0f;
     ship0.rotation = -std::numbers::pi_v<float> / 2.0f;  // facing left (toward)
 
     ship1.x = cx + 100.0f;
-    ship1.y = config.world_height / 2.0f;
+    ship1.y = config.world.world_height / 2.0f;
     ship1.rotation = std::numbers::pi_v<float> / 2.0f;  // facing right (away)
 
     float score_before_0 = session.get_scores()[0];
@@ -325,8 +325,8 @@ TEST(FighterDrillSessionTest, ContractPhaseRewardsMovingToward) {
 TEST(FighterDrillSessionTest, FullDrillRun) {
     nf::FighterDrillConfig config;
     config.population_size = 10;
-    config.tower_count = 5;
-    config.token_count = 3;
+    config.world.tower_count = 5;
+    config.world.token_count = 3;
     config.phase_duration_ticks = 10;
 
     nf::FighterDrillSession session(config, 42);
@@ -359,8 +359,8 @@ TEST(FighterDrillSessionTest, FullDrillRun) {
 TEST(FighterDrillSessionTest, DeadShipsDontScore) {
     nf::FighterDrillConfig config;
     config.population_size = 2;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.phase_duration_ticks = 10;
     nf::FighterDrillSession session(config, 42);
 

@@ -10,14 +10,14 @@ namespace nf = neuroflyer;
 
 TEST(AttackRunConfigTest, Defaults) {
     nf::AttackRunConfig config;
-    EXPECT_FLOAT_EQ(config.world_width, 4000.0f);
-    EXPECT_FLOAT_EQ(config.world_height, 4000.0f);
+    EXPECT_FLOAT_EQ(config.world.world_width, 4000.0f);
+    EXPECT_FLOAT_EQ(config.world.world_height, 4000.0f);
     EXPECT_EQ(config.population_size, 200u);
-    EXPECT_EQ(config.tower_count, 50u);
-    EXPECT_EQ(config.token_count, 30u);
+    EXPECT_EQ(config.world.tower_count, 50u);
+    EXPECT_EQ(config.world.token_count, 30u);
     EXPECT_FLOAT_EQ(config.min_starbase_distance, 1000.0f);
     EXPECT_EQ(config.phase_duration_ticks, 1200u);
-    EXPECT_FLOAT_EQ(config.attack_hit_bonus, 500.0f);
+    EXPECT_FLOAT_EQ(config.attack_hit_bonus, 5000.0f);
     EXPECT_GT(config.world_diagonal(), 0.0f);
 }
 
@@ -33,8 +33,8 @@ TEST(AttackRunConfigTest, PhaseEnum) {
 TEST(AttackRunSessionTest, Construction) {
     nf::AttackRunConfig config;
     config.population_size = 20;
-    config.tower_count = 10;
-    config.token_count = 5;
+    config.world.tower_count = 10;
+    config.world.token_count = 5;
     nf::AttackRunSession session(config, 42);
 
     EXPECT_EQ(session.ships().size(), 20u);
@@ -55,8 +55,8 @@ TEST(AttackRunSessionTest, StarbaseAtMinDistance) {
         nf::AttackRunConfig config;
         nf::AttackRunSession session(config, seed);
 
-        const float cx = config.world_width / 2.0f;
-        const float cy = config.world_height / 2.0f;
+        const float cx = config.world.world_width / 2.0f;
+        const float cy = config.world.world_height / 2.0f;
         const float dx = session.starbase().x - cx;
         const float dy = session.starbase().y - cy;
         const float dist = std::sqrt(dx * dx + dy * dy);
@@ -79,8 +79,8 @@ TEST(AttackRunSessionTest, ScoresInitializedToZero) {
 TEST(AttackRunSessionTest, PhaseTransitionsOnTimer) {
     nf::AttackRunConfig config;
     config.population_size = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.phase_duration_ticks = 10;
     nf::AttackRunSession session(config, 42);
 
@@ -101,16 +101,16 @@ TEST(AttackRunSessionTest, PhaseTransitionsOnTimer) {
 TEST(AttackRunSessionTest, EarlyPhaseOnStarbaseDestroy) {
     nf::AttackRunConfig config;
     config.population_size = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
-    config.world_width = 400.0f;
-    config.world_height = 400.0f;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
+    config.world.world_width = 400.0f;
+    config.world.world_height = 400.0f;
     config.phase_duration_ticks = 1000;
     config.starbase_hp = 10.0f;
     config.base_bullet_damage = 10.0f;
     config.min_starbase_distance = 50.0f;
     config.starbase_radius = 100.0f;
-    config.bullet_max_range = 500.0f;
+    config.world.bullet_max_range = 500.0f;
     nf::AttackRunSession session(config, 42);
 
     // Continuously re-aim and thrust toward starbase while firing
@@ -134,8 +134,8 @@ TEST(AttackRunSessionTest, EarlyPhaseOnStarbaseDestroy) {
 TEST(AttackRunSessionTest, StarbaseRespawnsEachPhase) {
     nf::AttackRunConfig config;
     config.population_size = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.phase_duration_ticks = 5;
     nf::AttackRunSession session(config, 42);
 
@@ -159,8 +159,8 @@ TEST(AttackRunSessionTest, StarbaseRespawnsEachPhase) {
 TEST(AttackRunSessionTest, TravelTowardTargetScores) {
     nf::AttackRunConfig config;
     config.population_size = 2;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.phase_duration_ticks = 100;
     nf::AttackRunSession session(config, 42);
 
@@ -189,16 +189,17 @@ TEST(AttackRunSessionTest, TravelTowardTargetScores) {
 TEST(AttackRunSessionTest, BulletHitBonus) {
     nf::AttackRunConfig config;
     config.population_size = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
-    config.world_width = 400.0f;
-    config.world_height = 400.0f;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
+    config.world.world_width = 400.0f;
+    config.world.world_height = 400.0f;
     config.starbase_hp = 10000.0f;  // high HP so it stays alive
     config.base_bullet_damage = 10.0f;
     config.min_starbase_distance = 50.0f;
     config.starbase_radius = 100.0f;
     config.attack_hit_bonus = 500.0f;
-    config.bullet_max_range = 500.0f;
+    config.bullet_cost = 0.0f;
+    config.world.bullet_max_range = 500.0f;
     config.phase_duration_ticks = 1000;
     nf::AttackRunSession session(config, 42);
 
@@ -221,10 +222,10 @@ TEST(AttackRunSessionTest, BulletHitBonus) {
 TEST(AttackRunSessionTest, TokenCollection) {
     nf::AttackRunConfig config;
     config.population_size = 1;
-    config.tower_count = 0;
-    config.token_count = 1;
-    config.world_width = 100.0f;
-    config.world_height = 100.0f;
+    config.world.tower_count = 0;
+    config.world.token_count = 1;
+    config.world.world_width = 100.0f;
+    config.world.world_height = 100.0f;
     config.min_starbase_distance = 10.0f;
     config.phase_duration_ticks = 100;
     nf::AttackRunSession session(config, 42);
@@ -243,8 +244,8 @@ TEST(AttackRunSessionTest, TokenCollection) {
 TEST(AttackRunSessionTest, DeathPenalty) {
     nf::AttackRunConfig config;
     config.population_size = 2;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.phase_duration_ticks = 100;
     nf::AttackRunSession session(config, 42);
 
@@ -265,8 +266,8 @@ TEST(AttackRunSessionTest, DeathPenalty) {
 TEST(AttackRunSessionTest, SessionEndsAfterPhase3) {
     nf::AttackRunConfig config;
     config.population_size = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.phase_duration_ticks = 5;
     nf::AttackRunSession session(config, 42);
 
@@ -279,16 +280,16 @@ TEST(AttackRunSessionTest, SessionEndsAfterPhase3) {
 TEST(AttackRunSessionTest, ThreeEarlyDestroys) {
     nf::AttackRunConfig config;
     config.population_size = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
-    config.world_width = 400.0f;
-    config.world_height = 400.0f;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
+    config.world.world_width = 400.0f;
+    config.world.world_height = 400.0f;
     config.phase_duration_ticks = 10000;
     config.starbase_hp = 10.0f;
     config.base_bullet_damage = 10.0f;
     config.min_starbase_distance = 50.0f;
     config.starbase_radius = 100.0f;
-    config.bullet_max_range = 500.0f;
+    config.world.bullet_max_range = 500.0f;
     nf::AttackRunSession session(config, 42);
 
     for (uint32_t t = 0; t < 500; ++t) {
@@ -312,8 +313,8 @@ TEST(AttackRunSessionTest, ThreeEarlyDestroys) {
 TEST(AttackRunSessionTest, FullDrillRun) {
     nf::AttackRunConfig config;
     config.population_size = 10;
-    config.tower_count = 5;
-    config.token_count = 3;
+    config.world.tower_count = 5;
+    config.world.token_count = 3;
     config.phase_duration_ticks = 10;
     nf::AttackRunSession session(config, 42);
 
