@@ -1,9 +1,5 @@
 #include <neuroflyer/arena_session.h>
 
-#include <algorithm>
-#include <cmath>
-#include <set>
-
 namespace neuroflyer {
 
 ArenaSession::ArenaSession(const ArenaConfig& config, uint32_t seed)

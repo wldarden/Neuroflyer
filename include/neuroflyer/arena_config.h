@@ -2,10 +2,8 @@
 
 #include <neuroflyer/arena_world.h>
 
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <vector>
 
 namespace neuroflyer {
 
