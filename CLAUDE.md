@@ -41,7 +41,14 @@ neuroflyer/
 │   │   │   ├── arena_game_screen.h
 │   │   │   ├── arena_pause_screen.h
 │   │   │   ├── fighter_drill_screen.h
-│   │   │   └── fighter_drill_pause_screen.h
+│   │   │   ├── fighter_drill_pause_screen.h
+│   │   │   ├── attack_run_screen.h
+│   │   │   ├── skirmish_config_screen.h
+│   │   │   ├── skirmish_screen.h
+│   │   │   ├── skirmish_pause_screen.h
+│   │   │   ├── team_skirmish_config_screen.h
+│   │   │   ├── team_skirmish_screen.h
+│   │   │   └── team_skirmish_pause_screen.h
 │   │   ├── views/                — Reusable panels (subclass UIView)
 │   │   │   ├── topology_preview_view.h
 │   │   │   ├── net_viewer_view.h
@@ -78,6 +85,10 @@ neuroflyer/
 │   ├── arena_match.h             — ArenaMatch: multi-generation match runner for team evolution
 │   ├── arena_sensor.h            — Arena sensor system: rotation-aware query_arena_sensor, build_arena_ship_input, ArenaQueryContext
 │   ├── fighter_drill_session.h   — FighterDrillSession, FighterDrillConfig, DrillPhase enum
+│   ├── attack_run_session.h      — AttackRunSession, AttackRunConfig, AttackRunPhase enum
+│   ├── skirmish.h                — SkirmishConfig, SkirmishMatchResult, run_skirmish_match()
+│   ├── skirmish_tournament.h     — SkirmishTournament: elimination bracket with per-tick stepping
+│   ├── team_skirmish.h           — TeamSkirmishConfig, TeamPool, TeamSkirmishSession, co-evolution mode
 │   ├── base.h                    — Base struct: team starbase with position, health, team_id
 │   ├── camera.h                  — Camera struct: pan/zoom for arena viewport
 │   ├── sector_grid.h             — SectorGrid: spatial index for NTM threat queries
@@ -105,6 +116,10 @@ neuroflyer/
 │   │   ├── arena_match.cpp       — Multi-generation arena match runner
 │   │   ├── arena_sensor.cpp      — Rotation-aware arena sensors + fighter input builder
 │   │   ├── fighter_drill_session.cpp — Drill world simulation, phase scoring
+│   │   ├── attack_run_session.cpp — Attack Runs drill: 3 attack phases with starbase targets
+│   │   ├── skirmish.cpp          — Skirmish match runner (blocking, kill-based scoring)
+│   │   ├── skirmish_tournament.cpp — Elimination bracket tournament engine
+│   │   ├── team_skirmish.cpp     — Team skirmish: per-ship nets, match runner, session orchestrator
 │   │   ├── sector_grid.cpp       — Spatial indexing for NTM queries
 │   │   ├── squad_leader.cpp      — NTM execution, squad leader net, order decoding
 │   │   ├── team_evolution.cpp    — Team-level evolution (3-net TeamIndividual)
@@ -137,7 +152,14 @@ neuroflyer/
 │   │   │   │   ├── fly_session_screen.cpp
 │   │   │   │   ├── pause_config_screen.cpp
 │   │   │   │   ├── fighter_drill_screen.cpp
-│   │   │   │   └── fighter_drill_pause_screen.cpp
+│   │   │   ├── fighter_drill_pause_screen.cpp
+│   │   │   ├── attack_run_screen.cpp
+│   │   │   ├── skirmish_config_screen.cpp
+│   │   │   ├── skirmish_screen.cpp
+│   │   │   ├── skirmish_pause_screen.cpp
+│   │   │   ├── team_skirmish_config_screen.cpp
+│   │   │   ├── team_skirmish_screen.cpp
+│   │   │   └── team_skirmish_pause_screen.cpp
 │   │   │   ├── arena/            — Arena mode screens
 │   │   │   │   ├── arena_config_screen.cpp
 │   │   │   │   ├── arena_game_screen.cpp
@@ -162,7 +184,7 @@ neuroflyer/
 │   │       ├── variant_net_render.cpp  — NeuroFlyer-specific net render wrapper
 │   │       ├── starfield.cpp           — Parallax star background
 │   │       └── occulus.cpp             — Ellipse sensor visualization
-├── tests/                        — GoogleTests (21 files: scroller, arena, drill, evolution, snapshot, collision, sensors)
+├── tests/                        — GoogleTests (25 files: scroller, arena, drill, attack runs, skirmish, evolution, snapshot, collision, sensors)
 ├── assets/                       — Sprites (ships, asteroids, coins, stars, hangar bg)
 └── docs/
     ├── backlog.md                — Feature backlog (keep updated!)
@@ -184,12 +206,27 @@ MainMenuScreen → push(FlySessionScreen) → push(PauseConfigScreen)
                │                        → push(LineageTreeScreen)
                │                        → push(FlySessionScreen) (training)
                │                        → push(FighterDrillScreen) (fighter drill training)
-               │                           → Space: push(FighterDrillPauseScreen)
-               │                              → tabs: Evolution, Save Variants
+               │                        │  → Space: push(FighterDrillPauseScreen)
+               │                        │     → tabs: Evolution, Save Variants
+               │                        → push(AttackRunScreen) (attack runs drill)
+               │                        │  → Space: push(FighterDrillPauseScreen)
+               │                        │     → tabs: Evolution, Save Variants
+               │                        → push(SkirmishConfigScreen) (squad skirmish config)
+               │                           → push(SkirmishScreen) (squad skirmish tournament)
+               │                              → Space: push(SkirmishPauseScreen)
+               │                              │  → tabs: Evolution, Save Variants (squad+NTM pairs)
+               │                              → Tab: cycle through individual fighters
+               │                              → F: toggle Fighter/SquadLeader net view
+               │                              → Target Viz: gold heading line + target circle + squad center markers
                → push(ArenaConfigScreen) → push(ArenaGameScreen)
-                                            → Space: push(ArenaPauseScreen)
-                                            │   → Save squad leader + NTM variants
-                                            → follow mode: net viewer (Fighter/SquadLeader toggle)
+               │                          → Space: push(ArenaPauseScreen)
+               │                          │   → Save squad leader + NTM variants
+               │                          → follow mode: net viewer (Fighter/SquadLeader toggle)
+               → push(TeamSkirmishConfigScreen) → push(TeamSkirmishScreen)
+                                                   → Space: push(TeamSkirmishPauseScreen)
+                                                   │   → tabs: Evolution, Save Fighters (per team), Save Squad Leaders (per team)
+                                                   → Tab: cycle through individual fighters
+                                                   → F: toggle Fighter/SquadLeader net view
 ```
 
 **Navigation:** `UIManager::push_screen()` / `pop_screen()` / `replace_screen()`. Screens subclass `UIScreen` and implement `on_draw(AppState&, Renderer&, UIManager&)`. Components take specific data + callbacks (not AppState), so they're reusable.
@@ -286,6 +323,28 @@ Per-tick velocity-based scoring (prevents spawn-position bias):
 
 Always active: +token_bonus per token collected. Tower collision = death (with death_penalty).
 
+### Attack Runs Scoring
+
+3 attack phases per generation. Each phase spawns a starbase at a random position. Destroying the starbase advances to the next phase immediately.
+
+| Event | Default Points |
+|-------|---------------|
+| Movement toward target | dot(velocity, toward_starbase) * 0.1 per tick |
+| Bullet hit on starbase | +5000 |
+| Token collected | +50 |
+| Tower collision | -200 (death) |
+
+### Squad Skirmish Scoring
+
+Elimination tournament. Teams of squad nets compete in 1v1 arena matches.
+
+| Event | Default Points |
+|-------|---------------|
+| Enemy fighter killed | +100 |
+| Bullet hit on enemy base | +10 per hit |
+| Enemy base destroyed | +kill_points × fighters_per_squad × num_squads |
+| Own fighter lost | -20 |
+
 ## Evolution
 
 - **Population:** 100 per generation (tunable; default: 10 for GameConfig scroller, 3 for EvolutionConfig)
@@ -353,6 +412,80 @@ All scoring is velocity-dot-product-based (per-tick), not position-based.
 
 Individual-based (same as scroller). Uses `evolve_population()` directly — no TeamIndividual wrappers.
 
+## Attack Runs Mode
+
+A fighter drill focused purely on attacking. 3 phases per generation, each spawning a starbase at a random position. Fighters score by moving toward the target and hitting it. Destroying the starbase advances to the next phase immediately (no time carryover).
+
+### Architecture
+
+- **AttackRunSession** (`attack_run_session.h` / `attack_run_session.cpp`) — pure engine class. Same arena physics as FighterDrillSession but all 3 phases are attack phases. Phase transition on timer expiry OR starbase destruction.
+- **AttackRunScreen** (`ui/screens/attack_run_screen.h` / `game/attack_run_screen.cpp`) — UIScreen driving the drill. All phases use attack-style scripted squad inputs (aggression=1.0, spacing=0.0, target heading/distance to current starbase).
+
+### Entry Point
+
+From the Variant Viewer screen, click "Attack Runs" button (next to "Fighter Drill").
+
+## Squad Skirmish Mode
+
+An elimination tournament drill for evolving squad nets (NTM + squad leader). N mutated squad net variants compete in 1v1 arena matches. Fighter nets are fixed. Variants accumulate fitness across all matches, then `evolve_squad_only()` breeds the next generation.
+
+### Architecture
+
+- **SkirmishConfig** (`skirmish.h`) — tournament and arena configuration: population size, seeds per match, world params, kill-based scoring weights.
+- **run_skirmish_match()** (`skirmish.h` / `skirmish.cpp`) — blocking function that runs a complete 2-team arena match with NTM + squad leader + fighter tick loop and kill-based scoring. Fork of `run_arena_match()` with different scoring.
+- **SkirmishTournament** (`skirmish_tournament.h` / `skirmish_tournament.cpp`) — orchestrates elimination bracket. `step()` advances one tick of the featured match while background matches run headlessly via `run_skirmish_match()`. Exposes `current_arena()` for live rendering, `variant_scores()` for leaderboard, and per-ship squad leader inputs for visualization.
+- **SkirmishConfigScreen** (`ui/screens/skirmish_config_screen.h` / `game/skirmish_config_screen.cpp`) — configuration UI before tournament start. Sections: Tournament, Arena, Bases, Physics, Scoring.
+- **SkirmishScreen** (`ui/screens/skirmish_screen.h` / `game/skirmish_screen.cpp`) — main tournament screen. Renders the featured match with team-colored ships (blue/red outlines) and squad-colored interiors. Tab cycles through individual fighters. F toggles Fighter/SquadLeader net view. Target Viz mode draws gold heading line from selected ship + gold target circle + squad center markers in squad colors.
+- **SkirmishPauseScreen** (`ui/screens/skirmish_pause_screen.h` / `game/skirmish_pause_screen.cpp`) — pause with Evolution tab (mutation sliders) and Save Variants tab (saves squad leader + companion NTM pairs to `squad/` directory).
+
+### Tournament Structure
+
+Single-elimination bracket with multiple seeds per matchup:
+1. Shuffle N variants. Pair into 1v1 matchups (bye if odd).
+2. Each matchup plays `seeds_per_match` times with different random seeds.
+3. Featured match (matchup 0) renders live; all others run headlessly.
+4. After all seeds: winners advance (higher accumulated score), losers eliminated but keep their scores.
+5. Finals (2-3 remaining): all pair combinations with double seeds.
+6. After tournament: all variants have accumulated fitness → `evolve_squad_only()` → next generation.
+
+### Entry Point
+
+From the Variant Viewer screen's SquadNets tab, select a squad variant + pair a fighter → click "Squad Skirmish" → SkirmishConfigScreen → SkirmishScreen.
+
+## Team Skirmish Mode
+
+A co-evolution mode where multiple teams (2-8) evolve complete team brains independently against each other. Unlike Squad Skirmish (which freezes fighters), Team Skirmish evolves fighters, squad leaders, and NTMs within each team's own population pool.
+
+### Architecture
+
+- **TeamSkirmishConfig** (`team_skirmish.h`) — wraps `SkirmishConfig` + `CompetitionMode` (RoundRobin/FreeForAll) + per-team `TeamSeed` (squad + fighter snapshots + genome dirs).
+- **TeamPool** (`team_skirmish.h`) — per-team state: squad population (`vector<TeamIndividual>`), fighter population (`vector<Individual>`), accumulated scores per individual.
+- **TeamSkirmishSession** (`team_skirmish.h` / `team_skirmish.cpp`) — orchestrates one generation. Manages match scheduling, featured match (one tick at a time for rendering), background matches (headless). Each ship gets its own fighter net, each squad gets its own NTM + squad leader net.
+- **tick_team_arena_match()** — per-tick net execution with per-squad/per-ship nets (unlike `tick_arena_match()` which shares one net per team).
+- **run_team_skirmish_match()** — blocking headless match runner returning per-ship scores.
+- **ShipAssignment** — maps each ship to `(team_id, squad_index, fighter_index)` for score routing.
+
+### Competition Modes
+
+- **Round Robin:** All unique team pairs play. N teams → N*(N-1)/2 matches. Same mutants play all matches; scores accumulate.
+- **Free-for-All:** One match with all N teams in the arena simultaneously.
+
+### Scoring
+
+- Per-ship: kills, deaths, proportional base damage (split evenly across team).
+- Squad leader fitness = sum of its fighters' scores (penalizes losing fighters).
+- Same mutants across all matches in a generation; scores accumulate before evolution.
+
+### Evolution
+
+Each team evolves independently after all matches:
+- `evolve_population()` on the fighter pool (all weights mutated).
+- `evolve_squad_only()` on the squad pool (NTM + squad leader mutated, fighter field unused).
+
+### Entry Point
+
+Main menu → "Team Skirmish" → TeamSkirmishConfigScreen (pick teams, nets, params) → TeamSkirmishScreen.
+
 ## Controls
 
 ### Scroller Controls
@@ -366,7 +499,7 @@ Individual-based (same as scroller). Uses `evolve_population()` directly — no 
 | Escape | Quit / Back |
 | Hover | Mouse over neural net nodes to inspect weights |
 
-### Arena / Fighter Drill Controls
+### Arena / Fighter Drill / Attack Runs Controls
 
 | Key | Action |
 |-----|--------|
@@ -377,6 +510,31 @@ Individual-based (same as scroller). Uses `evolve_population()` directly — no 
 | Escape | Exit to previous screen |
 | Mouse drag | Pan camera |
 | Shift+scroll | Zoom |
+
+### Squad Skirmish Controls
+
+| Key | Action |
+|-----|--------|
+| Tab | Cycle through individual fighters (SWARM → ship 0 → ship 1 → ... → SWARM) |
+| F | Toggle Fighter / Squad Leader net view (in follow mode) |
+| Space | Pause (push pause screen with Evolution + Save Variants tabs) |
+| 1-4 | Speed (1x/5x/20x/100x) |
+| Escape | Back to swarm (if following) or exit to previous screen |
+| Arrow keys | Pan camera (switches to swarm) |
+| Scroll | Zoom |
+| Target Viz button | Toggle gold heading line + target circle + squad center markers |
+
+### Team Skirmish Controls
+
+| Key | Action |
+|-----|--------|
+| Tab | Cycle through individual fighters (SWARM → ship 0 → ship 1 → ... → SWARM) |
+| F | Toggle Fighter / Squad Leader net view (in follow mode) |
+| Space | Pause (push pause screen with Evolution + Save Fighters + Save Squad Leaders tabs) |
+| 1-4 | Speed (1x/5x/20x/100x) |
+| Escape | Back to swarm (if following) or exit to previous screen |
+| Arrow keys | Pan camera (switches to swarm) |
+| Scroll | Zoom |
 
 ## Building & Running
 
@@ -475,6 +633,13 @@ All new UI features MUST use the 4-layer UI framework. Do NOT create standalone 
 | Screen | `ArenaPauseScreen` | `ui/screens/arena_pause_screen.h` | `ui/screens/arena/arena_pause_screen.cpp` |
 | Screen | `FighterDrillScreen` | `ui/screens/fighter_drill_screen.h` | `ui/screens/game/fighter_drill_screen.cpp` |
 | Screen | `FighterDrillPauseScreen` | `ui/screens/fighter_drill_pause_screen.h` | `ui/screens/game/fighter_drill_pause_screen.cpp` |
+| Screen | `AttackRunScreen` | `ui/screens/attack_run_screen.h` | `ui/screens/game/attack_run_screen.cpp` |
+| Screen | `SkirmishConfigScreen` | `ui/screens/skirmish_config_screen.h` | `ui/screens/game/skirmish_config_screen.cpp` |
+| Screen | `SkirmishScreen` | `ui/screens/skirmish_screen.h` | `ui/screens/game/skirmish_screen.cpp` |
+| Screen | `SkirmishPauseScreen` | `ui/screens/skirmish_pause_screen.h` | `ui/screens/game/skirmish_pause_screen.cpp` |
+| Screen | `TeamSkirmishConfigScreen` | `ui/screens/team_skirmish_config_screen.h` | `ui/screens/game/team_skirmish_config_screen.cpp` |
+| Screen | `TeamSkirmishScreen` | `ui/screens/team_skirmish_screen.h` | `ui/screens/game/team_skirmish_screen.cpp` |
+| Screen | `TeamSkirmishPauseScreen` | `ui/screens/team_skirmish_pause_screen.h` | `ui/screens/game/team_skirmish_pause_screen.cpp` |
 | View | `TopologyPreviewView` | `ui/views/topology_preview_view.h` | `ui/views/topology_preview_view.cpp` |
 | View | `NetViewerView` | `ui/views/net_viewer_view.h` | `ui/views/net_viewer_view.cpp` |
 | View | `TestBenchView` | `ui/views/test_bench_view.h` | `ui/views/test_bench_view.cpp` |
@@ -507,6 +672,11 @@ All new UI features MUST use the 4-layer UI framework. Do NOT create standalone 
 - **Rotated + non-rotated collision variants** — `collision.h` provides both `bullet_triangle_collision()` (scroller, ships face up) and `bullet_triangle_collision_rotated()` (arena, ships have facing direction). Both kept to avoid unnecessary trig in scroller mode.
 - **Hierarchical team brain** — arena teams use 3 co-evolved nets: NTM (threat scoring per nearby enemy), squad leader (tactical orders from macro state), fighter (sensorimotor control from sensors + squad orders). The NTM uses shared weights duplicated per nearby enemy with top-1 threat selection via `SectorGrid`.
 - **Team evolution** — `TeamIndividual` bundles 3 nets. `evolve_team_population()` mutates squad leader + NTM; `evolve_squad_only()` freezes fighter weights. Individual fighters use standard `evolve_population()` in drill mode.
+- **Attack Runs as separate drill** — `AttackRunSession` is a fork of `FighterDrillSession` with all 3 phases as attack phases and early phase advance on starbase destruction. Kept separate rather than parameterizing the existing drill to avoid adding complexity to the fighter drill.
+- **Skirmish tournament: elimination bracket with per-tick stepping** — `SkirmishTournament::step()` advances the featured match one tick while background matches run headlessly via `run_skirmish_match()`. This gives live visualization of one match while all others in the round complete in the background. All variants keep accumulated scores (not just winners) so `evolve_squad_only()` has a full fitness landscape.
+- **Skirmish scoring: kill-based, not weighted fitness** — Unlike arena mode's weighted fitness (damage + survival + alive + tokens), skirmish uses discrete kill/death/base-hit counting. This gives cleaner competitive signal for tournament selection.
+- **Target heading visualization derived from ship inputs** — The gold heading line in skirmish follow mode reconstructs world-space direction from `squad_target_heading * π + ship.rotation`, not from god-mode target position. This validates that the input encoding is correct by showing exactly what the neural net "sees."
+- **Team skirmish: per-ship/per-squad net assignment** — `TeamSkirmishSession` gives each ship its own fighter net mutant and each squad its own NTM + squad leader mutant, unlike `SkirmishTournament` which shares one net per team. `ShipAssignment` maps each ship to its team pool indices. Scores accumulate per-individual across all matches in a generation, then each team evolves independently via `evolve_population()` (fighters) and `evolve_squad_only()` (squad brains).
 
 ## Standards & Practices
 
