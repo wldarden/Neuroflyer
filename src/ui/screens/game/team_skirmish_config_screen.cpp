@@ -250,31 +250,31 @@ void TeamSkirmishConfigScreen::on_draw(AppState& state, Renderer& /*renderer*/,
     // --- Arena ---
     ui::section_header("Arena");
 
-    ui::slider_float("World Width", &arena_config_.world_width, 1000.0f, 10000.0f);
-    ui::slider_float("World Height", &arena_config_.world_height, 1000.0f, 10000.0f);
+    ui::slider_float("World Width", &arena_config_.world.world_width, 1000.0f, 10000.0f);
+    ui::slider_float("World Height", &arena_config_.world.world_height, 1000.0f, 10000.0f);
 
     {
-        int squads = static_cast<int>(arena_config_.num_squads_per_team);
+        int squads = static_cast<int>(arena_config_.world.num_squads);
         if (ui::input_int("Squads per Team", &squads, 1, 4)) {
-            arena_config_.num_squads_per_team = static_cast<std::size_t>(squads);
+            arena_config_.world.num_squads = static_cast<std::size_t>(squads);
         }
     }
     {
-        int fighters = static_cast<int>(arena_config_.fighters_per_squad);
+        int fighters = static_cast<int>(arena_config_.world.fighters_per_squad);
         if (ui::input_int("Fighters per Squad", &fighters, 2, 20)) {
-            arena_config_.fighters_per_squad = static_cast<std::size_t>(fighters);
+            arena_config_.world.fighters_per_squad = static_cast<std::size_t>(fighters);
         }
     }
     {
-        int towers = static_cast<int>(arena_config_.tower_count);
+        int towers = static_cast<int>(arena_config_.world.tower_count);
         if (ui::input_int("Towers", &towers, 0, 200)) {
-            arena_config_.tower_count = static_cast<std::size_t>(towers);
+            arena_config_.world.tower_count = static_cast<std::size_t>(towers);
         }
     }
     {
-        int tokens = static_cast<int>(arena_config_.token_count);
+        int tokens = static_cast<int>(arena_config_.world.token_count);
         if (ui::input_int("Tokens", &tokens, 0, 200)) {
-            arena_config_.token_count = static_cast<std::size_t>(tokens);
+            arena_config_.world.token_count = static_cast<std::size_t>(tokens);
         }
     }
     {
@@ -290,10 +290,10 @@ void TeamSkirmishConfigScreen::on_draw(AppState& state, Renderer& /*renderer*/,
     // --- Bases ---
     ui::section_header("Bases");
 
-    ui::slider_float("Base HP", &arena_config_.base_hp, 100.0f, 10000.0f);
-    ui::slider_float("Base Radius", &arena_config_.base_radius, 20.0f, 300.0f);
+    ui::slider_float("Base HP", &arena_config_.world.base_hp, 100.0f, 10000.0f);
+    ui::slider_float("Base Radius", &arena_config_.world.base_radius, 20.0f, 300.0f);
     ui::slider_float("Base Bullet Damage",
-        &arena_config_.base_bullet_damage, 1.0f, 100.0f);
+        &arena_config_.world.base_bullet_damage, 1.0f, 100.0f);
 
     ImGui::Spacing();
 
@@ -301,12 +301,12 @@ void TeamSkirmishConfigScreen::on_draw(AppState& state, Renderer& /*renderer*/,
     ui::section_header("Physics");
 
     ui::slider_float("Rotation Speed",
-        &arena_config_.rotation_speed, 0.01f, 0.2f);
+        &arena_config_.world.rotation_speed, 0.01f, 0.2f);
     ui::slider_float("Bullet Max Range",
-        &arena_config_.bullet_max_range, 200.0f, 3000.0f);
-    ui::checkbox("Wrap N/S", &arena_config_.wrap_ns);
-    ui::checkbox("Wrap E/W", &arena_config_.wrap_ew);
-    ui::checkbox("Friendly Fire", &arena_config_.friendly_fire);
+        &arena_config_.world.bullet_max_range, 200.0f, 3000.0f);
+    ui::checkbox("Wrap N/S", &arena_config_.world.wrap_ns);
+    ui::checkbox("Wrap E/W", &arena_config_.world.wrap_ew);
+    ui::checkbox("Friendly Fire", &arena_config_.world.friendly_fire);
 
     ImGui::Spacing();
 

@@ -29,11 +29,11 @@ std::vector<nf::TeamIndividual> make_test_variants(
 
 nf::SkirmishConfig small_config() {
     nf::SkirmishConfig config;
-    config.world_width = 800.0f;
-    config.world_height = 800.0f;
-    config.fighters_per_squad = 2;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.world_width = 800.0f;
+    config.world.world_height = 800.0f;
+    config.world.fighters_per_squad = 2;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.time_limit_ticks = 60;  // Very short matches
     config.seeds_per_match = 1;
     return config;

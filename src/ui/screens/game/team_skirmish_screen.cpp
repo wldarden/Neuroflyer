@@ -304,8 +304,8 @@ void TeamSkirmishScreen::initialize(AppState& state) {
     }
 
     // Camera at world center
-    camera_.x = config_.arena.world_width / 2.0f;
-    camera_.y = config_.arena.world_height / 2.0f;
+    camera_.x = config_.arena.world.world_width / 2.0f;
+    camera_.y = config_.arena.world.world_height / 2.0f;
     camera_.zoom = 0.15f;
     camera_.following = false;
     camera_mode_ = CameraMode::Swarm;
@@ -481,9 +481,9 @@ void TeamSkirmishScreen::render_world(Renderer& renderer) {
         const auto& ships = arena->ships();
         switch (camera_mode_) {
         case CameraMode::Swarm: {
-            float min_x = config_.arena.world_width;
+            float min_x = config_.arena.world.world_width;
             float max_x = 0.0f;
-            float min_y = config_.arena.world_height;
+            float min_y = config_.arena.world.world_height;
             float max_y = 0.0f;
             int alive_count = 0;
 
@@ -541,7 +541,7 @@ void TeamSkirmishScreen::render_world(Renderer& renderer) {
         }
     }
 
-    camera_.clamp_to_world(config_.arena.world_width, config_.arena.world_height,
+    camera_.clamp_to_world(config_.arena.world.world_width, config_.arena.world.world_height,
                            game_panel_w, game_panel_h);
 
     SDL_Renderer* sdl = renderer.renderer_;

@@ -16,8 +16,13 @@ SkirmishMatchResult run_skirmish_match(
     uint32_t seed) {
 
     // Build ArenaConfig from SkirmishConfig, override num_teams from teams.size()
-    ArenaConfig arena_config = config.to_arena_config();
+    ArenaConfig arena_config;
+    arena_config.world = config.world;
     arena_config.world.num_teams = teams.size();
+    arena_config.time_limit_ticks = config.time_limit_ticks;
+    arena_config.sector_size = config.sector_size;
+    arena_config.ntm_sector_radius = config.ntm_sector_radius;
+    arena_config.rounds_per_generation = 1;
 
     assert(teams.size() >= 2);
 
@@ -223,8 +228,8 @@ SkirmishMatchResult run_skirmish_match(
             float damage_dealt = base.max_hp - base.hp;
             if (base.team_id == team) {
                 // Penalty for damage taken on own base
-                if (damage_dealt > 0.0f && config.base_bullet_damage > 0.0f) {
-                    float hits = damage_dealt / config.base_bullet_damage;
+                if (damage_dealt > 0.0f && config.world.base_bullet_damage > 0.0f) {
+                    float hits = damage_dealt / config.world.base_bullet_damage;
                     score -= config.base_hit_points * hits;
                 }
                 if (!base.alive()) {
@@ -232,8 +237,8 @@ SkirmishMatchResult run_skirmish_match(
                 }
             } else {
                 // Reward for damage dealt to enemy base
-                if (damage_dealt > 0.0f && config.base_bullet_damage > 0.0f) {
-                    float hits = damage_dealt / config.base_bullet_damage;
+                if (damage_dealt > 0.0f && config.world.base_bullet_damage > 0.0f) {
+                    float hits = damage_dealt / config.world.base_bullet_damage;
                     score += config.base_hit_points * hits;
                 }
                 if (!base.alive()) {

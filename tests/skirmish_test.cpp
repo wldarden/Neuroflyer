@@ -37,39 +37,46 @@ TEST_F(SkirmishConfigTest, Defaults) {
     EXPECT_EQ(config.seeds_per_match, 3u);
     EXPECT_FLOAT_EQ(config.kill_points, 100.0f);
     EXPECT_FLOAT_EQ(config.death_points, 100.0f);
-    EXPECT_EQ(config.fighters_per_squad, 8u);
+    EXPECT_EQ(config.world.fighters_per_squad, 8u);
     EXPECT_EQ(config.time_limit_ticks, 3600u);
 }
 
 TEST_F(SkirmishConfigTest, BaseKillPointsFormula) {
     config.kill_points = 100.0f;
-    config.fighters_per_squad = 8;
-    config.num_squads_per_team = 1;
+    config.world.fighters_per_squad = 8;
+    config.world.num_squads = 1;
     EXPECT_FLOAT_EQ(config.base_kill_points(), 800.0f);
 
-    config.num_squads_per_team = 2;
+    config.world.num_squads = 2;
     EXPECT_FLOAT_EQ(config.base_kill_points(), 1600.0f);
 }
 
-TEST_F(SkirmishConfigTest, ToArenaConfig) {
-    config.world_width = 2000.0f;
-    config.world_height = 2000.0f;
-    config.fighters_per_squad = 4;
-    config.tower_count = 10;
+TEST_F(SkirmishConfigTest, WorldConfigDefaults) {
+    config.world.world_width = 2000.0f;
+    config.world.world_height = 2000.0f;
+    config.world.fighters_per_squad = 4;
+    config.world.tower_count = 10;
 
-    const auto ac = config.to_arena_config();
+    // Build ArenaConfig the same way callers do
+    nf::ArenaConfig ac;
+    ac.world = config.world;
+    ac.world.num_teams = 2;
+    ac.time_limit_ticks = config.time_limit_ticks;
+    ac.sector_size = config.sector_size;
+    ac.ntm_sector_radius = config.ntm_sector_radius;
+    ac.rounds_per_generation = 1;
 
     EXPECT_FLOAT_EQ(ac.world.world_width, 2000.0f);
     EXPECT_FLOAT_EQ(ac.world.world_height, 2000.0f);
     EXPECT_EQ(ac.world.fighters_per_squad, 4u);
     EXPECT_EQ(ac.world.tower_count, 10u);
     EXPECT_EQ(ac.world.num_teams, 2u);
-    EXPECT_FLOAT_EQ(ac.world.base_hp, config.base_hp);
-    EXPECT_FLOAT_EQ(ac.world.base_radius, config.base_radius);
-    EXPECT_FLOAT_EQ(ac.world.rotation_speed, config.rotation_speed);
-    EXPECT_FLOAT_EQ(ac.world.bullet_max_range, config.bullet_max_range);
-    EXPECT_EQ(ac.world.wrap_ns, config.wrap_ns);
-    EXPECT_EQ(ac.world.wrap_ew, config.wrap_ew);
+    EXPECT_FLOAT_EQ(ac.world.base_hp, config.world.base_hp);
+    EXPECT_FLOAT_EQ(ac.world.base_radius, config.world.base_radius);
+    EXPECT_FLOAT_EQ(ac.world.rotation_speed, config.world.rotation_speed);
+    EXPECT_FLOAT_EQ(ac.world.bullet_max_range, config.world.bullet_max_range);
+    EXPECT_EQ(ac.world.wrap_ns, config.world.wrap_ns);
+    EXPECT_EQ(ac.world.wrap_ew, config.world.wrap_ew);
     EXPECT_FLOAT_EQ(ac.sector_size, config.sector_size);
     EXPECT_EQ(ac.ntm_sector_radius, config.ntm_sector_radius);
     EXPECT_EQ(ac.rounds_per_generation, 1u);
@@ -87,11 +94,11 @@ protected:
 
 TEST_F(SkirmishMatchTest, RunsToCompletion) {
     nf::SkirmishConfig cfg;
-    cfg.world_width = 800.0f;
-    cfg.world_height = 800.0f;
-    cfg.fighters_per_squad = 2;
-    cfg.tower_count = 0;
-    cfg.token_count = 0;
+    cfg.world.world_width = 800.0f;
+    cfg.world.world_height = 800.0f;
+    cfg.world.fighters_per_squad = 2;
+    cfg.world.tower_count = 0;
+    cfg.world.token_count = 0;
     cfg.time_limit_ticks = 100;
 
     std::vector<nf::TeamIndividual> teams;
@@ -107,12 +114,12 @@ TEST_F(SkirmishMatchTest, RunsToCompletion) {
 
 TEST_F(SkirmishMatchTest, EndsOnTimeLimit) {
     nf::SkirmishConfig cfg;
-    cfg.world_width = 1000.0f;
-    cfg.world_height = 1000.0f;
-    cfg.fighters_per_squad = 2;
-    cfg.tower_count = 0;
-    cfg.token_count = 0;
-    cfg.base_hp = 999999.0f;
+    cfg.world.world_width = 1000.0f;
+    cfg.world.world_height = 1000.0f;
+    cfg.world.fighters_per_squad = 2;
+    cfg.world.tower_count = 0;
+    cfg.world.token_count = 0;
+    cfg.world.base_hp = 999999.0f;
     cfg.time_limit_ticks = 50;
 
     std::vector<nf::TeamIndividual> teams;
@@ -129,11 +136,11 @@ TEST_F(SkirmishMatchTest, EndsOnTimeLimit) {
 
 TEST_F(SkirmishMatchTest, ScoresAreFinite) {
     nf::SkirmishConfig cfg;
-    cfg.world_width = 800.0f;
-    cfg.world_height = 800.0f;
-    cfg.fighters_per_squad = 4;
-    cfg.tower_count = 0;
-    cfg.token_count = 0;
+    cfg.world.world_width = 800.0f;
+    cfg.world.world_height = 800.0f;
+    cfg.world.fighters_per_squad = 4;
+    cfg.world.tower_count = 0;
+    cfg.world.token_count = 0;
     cfg.time_limit_ticks = 300;
 
     std::vector<nf::TeamIndividual> teams;

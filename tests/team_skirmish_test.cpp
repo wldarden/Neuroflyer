@@ -44,12 +44,12 @@ nf::TeamPool make_test_pool(
 
 nf::SkirmishConfig small_skirmish_config() {
     nf::SkirmishConfig cfg;
-    cfg.world_width = 2000.0f;
-    cfg.world_height = 2000.0f;
-    cfg.fighters_per_squad = 4;
-    cfg.num_squads_per_team = 1;
-    cfg.tower_count = 0;
-    cfg.token_count = 0;
+    cfg.world.world_width = 2000.0f;
+    cfg.world.world_height = 2000.0f;
+    cfg.world.fighters_per_squad = 4;
+    cfg.world.num_squads = 1;
+    cfg.world.tower_count = 0;
+    cfg.world.token_count = 0;
     cfg.time_limit_ticks = 60;
     cfg.seeds_per_match = 1;
     return cfg;
@@ -217,7 +217,7 @@ TEST_F(TeamSkirmishMatchTest, EndsAtOrBeforeTimeLimit) {
     constexpr std::size_t fighters_per_squad = 4;
 
     nf::SkirmishConfig cfg = small_skirmish_config();
-    cfg.base_hp = 999999.0f;  // prevent early base destruction
+    cfg.world.base_hp = 999999.0f;  // prevent early base destruction
     cfg.time_limit_ticks = 80;
 
     std::vector<nf::TeamPool> pools;

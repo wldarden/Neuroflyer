@@ -4,6 +4,7 @@
 
 #include <neuroflyer/app_state.h>
 #include <neuroflyer/renderer.h>
+#include <neuroflyer/sensor_engine.h>
 #include <neuroflyer/snapshot_io.h>
 #include <neuroflyer/snapshot_utils.h>
 
@@ -11,10 +12,10 @@
 #include <SDL.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <iostream>
-#include <limits>
 #include <numbers>
 
 namespace neuroflyer {
@@ -45,6 +46,113 @@ void draw_rotated_triangle(SDL_Renderer* renderer,
     SDL_RenderDrawLineF(renderer, x1, y1, x2, y2);
     SDL_RenderDrawLineF(renderer, x2, y2, x0, y0);
 }
+
+void draw_filled_triangle(SDL_Renderer* renderer,
+                           float cx, float cy, float size,
+                           float rotation,
+                           uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    float cos_r = std::cos(rotation);
+    float sin_r = std::sin(rotation);
+
+    auto rotate = [&](float lx, float ly, float& ox, float& oy) {
+        ox = cx + lx * cos_r - ly * sin_r;
+        oy = cy + lx * sin_r + ly * cos_r;
+    };
+
+    float x0, y0, x1, y1, x2, y2;
+    rotate(0.0f, -size, x0, y0);
+    rotate(-size, size, x1, y1);
+    rotate(size, size, x2, y2);
+
+    // Scanline fill: rasterize the triangle
+    SDL_SetRenderDrawColor(renderer, r, g, b, a);
+    float min_y = std::min({y0, y1, y2});
+    float max_y = std::max({y0, y1, y2});
+    for (int sy = static_cast<int>(min_y); sy <= static_cast<int>(max_y); ++sy) {
+        float fy = static_cast<float>(sy) + 0.5f;
+        // Find x intersections of scanline with each edge
+        float xs[3];
+        int count = 0;
+        auto edge = [&](float ax, float ay, float bx, float by) {
+            if ((ay <= fy && by > fy) || (by <= fy && ay > fy)) {
+                float t = (fy - ay) / (by - ay);
+                xs[count++] = ax + t * (bx - ax);
+            }
+        };
+        edge(x0, y0, x1, y1);
+        edge(x1, y1, x2, y2);
+        edge(x2, y2, x0, y0);
+        if (count >= 2) {
+            float left = std::min(xs[0], xs[1]);
+            float right = std::max(xs[0], xs[1]);
+            SDL_RenderDrawLineF(renderer, left, fy, right, fy);
+        }
+    }
+}
+
+/// Draw damage effects on a ship based on damage_level.
+/// Level 0: pristine. Level 1: gold cracks. Level 2: cracks + flames.
+void draw_damage_effects(SDL_Renderer* renderer,
+                         float cx, float cy, float size,
+                         float rotation, int damage_level) {
+    if (damage_level <= 0) return;
+
+    float cos_r = std::cos(rotation);
+    float sin_r = std::sin(rotation);
+    auto rotate = [&](float lx, float ly, float& ox, float& oy) {
+        ox = cx + lx * cos_r - ly * sin_r;
+        oy = cy + lx * sin_r + ly * cos_r;
+    };
+
+    // Level 1+: gold crack lines
+    SDL_SetRenderDrawColor(renderer, 255, 200, 50, 200);
+    float ax, ay, bx, by, mx, my;
+    rotate(-size * 0.4f, -size * 0.3f, ax, ay);
+    rotate(size * 0.3f, size * 0.2f, bx, by);
+    SDL_RenderDrawLineF(renderer, ax, ay, bx, by);
+    rotate(size * 0.3f, -size * 0.5f, ax, ay);
+    rotate(0.0f, 0.0f, mx, my);
+    SDL_RenderDrawLineF(renderer, ax, ay, mx, my);
+    rotate(-size * 0.5f, size * 0.4f, bx, by);
+    SDL_RenderDrawLineF(renderer, mx, my, bx, by);
+    rotate(-size * 0.15f, -size * 0.6f, ax, ay);
+    rotate(size * 0.2f, -size * 0.1f, bx, by);
+    SDL_RenderDrawLineF(renderer, ax, ay, bx, by);
+
+    if (damage_level >= 2) {
+        float flame_len = size * 1.2f;
+        SDL_SetRenderDrawColor(renderer, 255, 140, 30, 180);
+        rotate(0.0f, size * 0.6f, ax, ay);
+        rotate(0.0f, size * 0.6f + flame_len, bx, by);
+        SDL_RenderDrawLineF(renderer, ax, ay, bx, by);
+        SDL_SetRenderDrawColor(renderer, 255, 80, 20, 160);
+        rotate(-size * 0.3f, size * 0.5f, ax, ay);
+        rotate(-size * 0.15f, size * 0.5f + flame_len * 0.7f, bx, by);
+        SDL_RenderDrawLineF(renderer, ax, ay, bx, by);
+        rotate(size * 0.3f, size * 0.5f, ax, ay);
+        rotate(size * 0.15f, size * 0.5f + flame_len * 0.7f, bx, by);
+        SDL_RenderDrawLineF(renderer, ax, ay, bx, by);
+        SDL_SetRenderDrawColor(renderer, 255, 230, 80, 200);
+        rotate(0.0f, size * 0.7f, ax, ay);
+        rotate(0.0f, size * 0.7f + flame_len * 0.5f, bx, by);
+        SDL_RenderDrawLineF(renderer, ax, ay, bx, by);
+    }
+}
+
+// Squad interior colors: subtle tints per squad index
+// These are muted versions designed to be visible inside a triangle outline
+struct SquadColor { uint8_t r, g, b; };
+constexpr SquadColor squad_colors[] = {
+    {60, 120, 180},   // squad 0: steel blue
+    {180, 100, 60},   // squad 1: burnt orange
+    {60, 160, 80},    // squad 2: forest green
+    {160, 60, 160},   // squad 3: purple
+    {160, 160, 60},   // squad 4: olive
+    {60, 160, 160},   // squad 5: teal
+    {160, 100, 100},  // squad 6: dusty rose
+    {100, 100, 160},  // squad 7: slate
+};
+constexpr std::size_t num_squad_colors = sizeof(squad_colors) / sizeof(squad_colors[0]);
 
 void draw_filled_circle(SDL_Renderer* renderer,
                         float cx, float cy, float radius,
@@ -128,6 +236,28 @@ void SkirmishScreen::initialize(AppState& state) {
         fighter_ind = convert_variant_to_fighter(fighter_ind, ship_design_);
     }
 
+    // Adapt squad net if its topology doesn't match current expected inputs
+    auto target_squad_ids = build_squad_leader_input_labels();
+    if (squad_ind.topology.input_size != target_squad_ids.size() ||
+        (!squad_ind.topology.input_ids.empty() && squad_ind.topology.input_ids != target_squad_ids)) {
+        // If legacy net with no IDs, assign old-format labels so adaptation can match by name
+        if (squad_ind.topology.input_ids.empty()) {
+            // Old 14-input labels (before Spacing was removed and Enemy%/Time% added)
+            squad_ind.topology.input_ids = {
+                "Sqd HP", "Home Sin", "Home Cos", "Home Dst", "Home HP",
+                "Spacing", "Cmd Sin", "Cmd Cos", "Cmd Dst",
+                "Threat?", "Thr Sin", "Thr Cos", "Thr Dst", "Thr Scr"
+            };
+            squad_ind.topology.output_ids = build_squad_leader_output_labels();
+        }
+        auto [adapted, report] = adapt_individual_inputs(
+            squad_ind, target_squad_ids, ship_design_, rng_);
+        if (report.needed()) {
+            std::cout << "[SquadSkirmish] Adapted squad net: " << report.message() << "\n";
+        }
+        squad_ind = adapted;
+    }
+
     // Evolution config
     evo_config_.population_size = config_.population_size;
     evo_config_.elitism_count = 2;
@@ -155,8 +285,8 @@ void SkirmishScreen::initialize(AppState& state) {
         config_, ship_design_, population_, seed);
 
     // Camera at world center
-    camera_.x = config_.world_width / 2.0f;
-    camera_.y = config_.world_height / 2.0f;
+    camera_.x = config_.world.world_width / 2.0f;
+    camera_.y = config_.world.world_height / 2.0f;
     camera_.zoom = 0.15f;
     camera_.following = false;
     camera_mode_ = CameraMode::Swarm;
@@ -318,9 +448,9 @@ void SkirmishScreen::render_world(Renderer& renderer) {
         const auto& ships = arena->ships();
         switch (camera_mode_) {
         case CameraMode::Swarm: {
-            float min_x = config_.world_width;
+            float min_x = config_.world.world_width;
             float max_x = 0.0f;
-            float min_y = config_.world_height;
+            float min_y = config_.world.world_height;
             float max_y = 0.0f;
             int alive_count = 0;
 
@@ -379,7 +509,7 @@ void SkirmishScreen::render_world(Renderer& renderer) {
         }
     }
 
-    camera_.clamp_to_world(config_.world_width, config_.world_height,
+    camera_.clamp_to_world(config_.world.world_width, config_.world.world_height,
                            game_panel_w, game_panel_h);
 
     SDL_Renderer* sdl = renderer.renderer_;
@@ -496,10 +626,22 @@ void SkirmishScreen::render_world(Renderer& renderer) {
                 cr = 255; cg = 100; cb = 100;
             }
 
+            // Squad interior color (subtle fill)
+            int squad = arena->squad_of(i);
+            auto sq_idx = static_cast<std::size_t>(squad) % num_squad_colors;
+            const auto& sqc = squad_colors[sq_idx];
+            float inner_size = ship_screen_size * 0.7f;
             bool is_selected = (static_cast<int>(i) == selected_ship_);
+            uint8_t fill_alpha = is_selected ? 120 : 60;
+            draw_filled_triangle(sdl, sx, sy, inner_size,
+                                 ship.rotation, sqc.r, sqc.g, sqc.b, fill_alpha);
+
+            // Team-colored outline
             uint8_t alpha = is_selected ? 255 : 140;
             draw_rotated_triangle(sdl, sx, sy, ship_screen_size,
                                   ship.rotation, cr, cg, cb, alpha);
+            draw_damage_effects(sdl, sx, sy, ship_screen_size,
+                                ship.rotation, ship.damage_level());
         }
 
         // Follow indicator on selected ship
@@ -512,6 +654,63 @@ void SkirmishScreen::render_world(Renderer& renderer) {
                                                      game_panel_w, game_panel_h);
             float radius = (Triangle::SIZE + 6.0f) * camera_.zoom;
             draw_circle_outline(sdl, sx, sy, radius, 255, 255, 255, 180);
+
+            // Target heading visualization
+            if (show_target_viz_ && tournament_) {
+                const auto& sl_inputs = tournament_->last_squad_inputs();
+                auto si = static_cast<std::size_t>(selected_ship_);
+                if (si < sl_inputs.size()) {
+                    // Reconstruct world-space target direction from the ship's
+                    // squad_target_heading input (relative to ship facing, in [-1,1])
+                    constexpr float PI = std::numbers::pi_v<float>;
+                    float rel_angle = sl_inputs[si].squad_target_heading * PI;
+                    float world_angle = rel_angle + ship.rotation;
+
+                    // Gold heading line: 2 ship lengths from ship center
+                    float line_len = Triangle::SIZE * 2.0f * camera_.zoom;
+                    float dx = std::sin(world_angle) * line_len;
+                    float dy = -std::cos(world_angle) * line_len;
+                    SDL_SetRenderDrawColor(sdl, 255, 200, 50, 220);
+                    SDL_RenderDrawLineF(sdl, sx, sy, sx + dx, sy + dy);
+                    // Draw a second offset line for thickness
+                    SDL_RenderDrawLineF(sdl, sx + 1, sy, sx + dx + 1, sy + dy);
+                    SDL_RenderDrawLineF(sdl, sx, sy + 1, sx + dx, sy + dy + 1);
+
+                    // Gold circle around the target position
+                    // Reconstruct target world position from ship pos + heading + distance
+                    float target_dist = sl_inputs[si].squad_target_distance;
+                    float world_diag = config_.world_diagonal();
+                    float actual_dist = target_dist * world_diag;
+                    float target_wx = ship.x + std::sin(world_angle) * actual_dist;
+                    float target_wy = ship.y - std::cos(world_angle) * actual_dist;
+                    auto [tx, ty] = camera_.world_to_screen(target_wx, target_wy,
+                                                             game_panel_w, game_panel_h);
+                    float target_r = 15.0f * camera_.zoom;
+                    draw_circle_outline(sdl, tx, ty, target_r, 255, 200, 50, 200);
+                    draw_circle_outline(sdl, tx, ty, target_r + 1, 255, 200, 50, 150);
+                }
+            }
+        }
+
+        // Squad center markers (when target viz is on)
+        if (show_target_viz_) {
+            std::size_t num_teams = 2;  // skirmish is always 2 teams
+            std::size_t num_squads = config_.world.num_squads;
+            for (std::size_t t = 0; t < num_teams; ++t) {
+                for (std::size_t s = 0; s < num_squads; ++s) {
+                    auto stats = arena->compute_squad_stats(static_cast<int>(t), static_cast<int>(s));
+                    if (stats.alive_fraction <= 0.0f) continue;
+
+                    auto sq_idx = (t * num_squads + s) % num_squad_colors;
+                    const auto& sqc = squad_colors[sq_idx];
+                    auto [scx, scy] = camera_.world_to_screen(
+                        stats.centroid_x, stats.centroid_y,
+                        game_panel_w, game_panel_h);
+                    float center_r = 12.0f * camera_.zoom;
+                    draw_circle_outline(sdl, scx, scy, center_r, sqc.r, sqc.g, sqc.b, 200);
+                    draw_circle_outline(sdl, scx, scy, center_r + 1, sqc.r, sqc.g, sqc.b, 120);
+                }
+            }
         }
     }
 
@@ -555,13 +754,14 @@ void SkirmishScreen::render_hud(Renderer& renderer) {
             net_viewer_state_.network = tournament_->fighter_net(team_idx);
             net_viewer_state_.ship_design = ship_design_;
             net_viewer_state_.net_type = NetType::Fighter;
-            net_viewer_state_.input_values = last_fighter_input_;
+            net_viewer_state_.input_values = tournament_->last_fighter_input(
+                static_cast<std::size_t>(selected_ship_));
         } else {
             net_viewer_state_.individual = &population_[variant_idx].squad_individual;
             net_viewer_state_.network = tournament_->leader_net(team_idx);
             net_viewer_state_.ship_design = ship_design_;
             net_viewer_state_.net_type = NetType::SquadLeader;
-            net_viewer_state_.input_values = last_leader_input_;
+            net_viewer_state_.input_values = tournament_->last_leader_input(team_idx);
         }
 
         // Compact HUD
@@ -601,6 +801,14 @@ void SkirmishScreen::render_hud(Renderer& renderer) {
             follow_net_view_ = FollowNetView::SquadLeader;
         }
         if (is_leader) ImGui::PopStyleColor();
+
+        // Target visualization toggle
+        bool viz_active = show_target_viz_;
+        if (viz_active) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.5f, 0.1f, 1.0f));
+        if (ImGui::Button("Target Viz", ImVec2(-1, 0))) {
+            show_target_viz_ = !show_target_viz_;
+        }
+        if (viz_active) ImGui::PopStyleColor();
 
         ImGui::End();
 
@@ -710,12 +918,23 @@ void SkirmishScreen::on_draw(AppState& state, Renderer& renderer,
     if (handle_input(ui)) return;  // screen was popped
 
     // Tick (unless paused)
-    if (!paused_) {
+    if (!paused_ && tournament_) {
+        auto frame_start = std::chrono::steady_clock::now();
+
         for (int t = 0; t < ticks_per_frame_; ++t) {
-            if (tournament_ && tournament_->step()) {
+            if (tournament_->step()) {
                 evolve_generation();
                 break;
             }
+        }
+
+        // Fill remaining frame time with background match work (30fps = 33ms budget)
+        constexpr int kFrameBudgetMs = 33;
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - frame_start);
+        int remaining = kFrameBudgetMs - static_cast<int>(elapsed.count());
+        if (remaining > 0 && tournament_) {
+            tournament_->run_background_work(remaining);
         }
     }
 

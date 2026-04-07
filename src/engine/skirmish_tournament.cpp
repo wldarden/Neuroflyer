@@ -211,8 +211,8 @@ void score_match(
             float damage_dealt = base.max_hp - base.hp;
             if (base.team_id == team) {
                 // Penalty for damage taken on own base (symmetric with base_hit_points)
-                if (damage_dealt > 0.0f && config.base_bullet_damage > 0.0f) {
-                    float hits = damage_dealt / config.base_bullet_damage;
+                if (damage_dealt > 0.0f && config.world.base_bullet_damage > 0.0f) {
+                    float hits = damage_dealt / config.world.base_bullet_damage;
                     score -= config.base_hit_points * hits;
                 }
                 if (!base.alive()) {
@@ -220,8 +220,8 @@ void score_match(
                 }
             } else {
                 // Reward for damage dealt to enemy base
-                if (damage_dealt > 0.0f && config.base_bullet_damage > 0.0f) {
-                    float hits = damage_dealt / config.base_bullet_damage;
+                if (damage_dealt > 0.0f && config.world.base_bullet_damage > 0.0f) {
+                    float hits = damage_dealt / config.world.base_bullet_damage;
                     score += config.base_hit_points * hits;
                 }
                 if (!base.alive()) {
@@ -383,8 +383,12 @@ void SkirmishTournament::start_bg_match() {
     assert(!bg_match_active_);
     auto [idx_a, idx_b] = rounds_[round_idx_].matchups[bg_match_cursor_];
 
-    bg_arena_config_ = config_.to_arena_config();
+    bg_arena_config_.world = config_.world;
     bg_arena_config_.world.num_teams = 2;
+    bg_arena_config_.time_limit_ticks = config_.time_limit_ticks;
+    bg_arena_config_.sector_size = config_.sector_size;
+    bg_arena_config_.ntm_sector_radius = config_.ntm_sector_radius;
+    bg_arena_config_.rounds_per_generation = 1;
 
     bg_arena_ = std::make_unique<ArenaSession>(bg_arena_config_,
                                                 static_cast<uint32_t>(rng_()));
@@ -465,8 +469,12 @@ void SkirmishTournament::start_match() {
     const std::size_t idx_b = matchup.second;
 
     // Build ArenaConfig for a 2-team match
-    arena_config_ = config_.to_arena_config();
+    arena_config_.world = config_.world;
     arena_config_.world.num_teams = 2;
+    arena_config_.time_limit_ticks = config_.time_limit_ticks;
+    arena_config_.sector_size = config_.sector_size;
+    arena_config_.ntm_sector_radius = config_.ntm_sector_radius;
+    arena_config_.rounds_per_generation = 1;
 
     // Create arena with a random seed
     const auto arena_seed = rng_();

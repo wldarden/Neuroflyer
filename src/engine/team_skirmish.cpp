@@ -248,8 +248,13 @@ TeamSkirmishMatchResult run_team_skirmish_match(
 
     const std::size_t num_teams = team_pools.size();
 
-    ArenaConfig arena_config = config.to_arena_config();
+    ArenaConfig arena_config;
+    arena_config.world = config.world;
     arena_config.world.num_teams = num_teams;
+    arena_config.time_limit_ticks = config.time_limit_ticks;
+    arena_config.sector_size = config.sector_size;
+    arena_config.ntm_sector_radius = config.ntm_sector_radius;
+    arena_config.rounds_per_generation = 1;
 
     ArenaSession arena(arena_config, seed);
 
@@ -319,16 +324,16 @@ TeamSkirmishMatchResult run_team_skirmish_match(
             for (const auto& base : arena.bases()) {
                 const float damage_dealt = base.max_hp - base.hp;
                 if (base.team_id == team) {
-                    if (damage_dealt > 0.0f && config.base_bullet_damage > 0.0f) {
-                        const float hits = damage_dealt / config.base_bullet_damage;
+                    if (damage_dealt > 0.0f && config.world.base_bullet_damage > 0.0f) {
+                        const float hits = damage_dealt / config.world.base_bullet_damage;
                         team_base_score -= config.base_hit_points * hits;
                     }
                     if (!base.alive()) {
                         team_base_score -= config.base_kill_points();
                     }
                 } else {
-                    if (damage_dealt > 0.0f && config.base_bullet_damage > 0.0f) {
-                        const float hits = damage_dealt / config.base_bullet_damage;
+                    if (damage_dealt > 0.0f && config.world.base_bullet_damage > 0.0f) {
+                        const float hits = damage_dealt / config.world.base_bullet_damage;
                         team_base_score += config.base_hit_points * hits;
                     }
                     if (!base.alive()) {
@@ -417,8 +422,12 @@ void TeamSkirmishSession::build_schedule() {
 }
 
 void TeamSkirmishSession::start_match(const std::vector<std::size_t>& match_teams) {
-    arena_config_ = config_.arena.to_arena_config();
+    arena_config_.world = config_.arena.world;
     arena_config_.world.num_teams = match_teams.size();
+    arena_config_.time_limit_ticks = config_.arena.time_limit_ticks;
+    arena_config_.sector_size = config_.arena.sector_size;
+    arena_config_.ntm_sector_radius = config_.arena.ntm_sector_radius;
+    arena_config_.rounds_per_generation = 1;
 
     arena_ = std::make_unique<ArenaSession>(arena_config_,
                                              static_cast<uint32_t>(rng_()));
@@ -426,8 +435,8 @@ void TeamSkirmishSession::start_match(const std::vector<std::size_t>& match_team
     // Build assignments: match-local team index t maps to match_teams[t] (global id)
     assignments_ = build_ship_assignments(
         team_pools_, match_teams,
-        config_.arena.num_squads_per_team,
-        config_.arena.fighters_per_squad);
+        config_.arena.world.num_squads,
+        config_.arena.world.fighters_per_squad);
 
     // Build per-team nets (indexed by match-local team index)
     const std::size_t teams_in_match = match_teams.size();
@@ -461,7 +470,7 @@ void TeamSkirmishSession::start_match(const std::vector<std::size_t>& match_team
     }
 
     last_sl_inputs_.assign(total_ships, SquadLeaderFighterInputs{});
-    const std::size_t total_squads = teams_in_match * config_.arena.num_squads_per_team;
+    const std::size_t total_squads = teams_in_match * config_.arena.world.num_squads;
     last_leader_inputs_.assign(total_squads, std::vector<float>(17, 0.0f));
     last_fighter_inputs_.assign(total_ships, std::vector<float>{});
 
@@ -506,16 +515,16 @@ void TeamSkirmishSession::score_featured_match() {
             for (const auto& base : arena_->bases()) {
                 const float damage_dealt = base.max_hp - base.hp;
                 if (base.team_id == team) {
-                    if (damage_dealt > 0.0f && config_.arena.base_bullet_damage > 0.0f) {
-                        const float hits = damage_dealt / config_.arena.base_bullet_damage;
+                    if (damage_dealt > 0.0f && config_.arena.world.base_bullet_damage > 0.0f) {
+                        const float hits = damage_dealt / config_.arena.world.base_bullet_damage;
                         team_base_score -= config_.arena.base_hit_points * hits;
                     }
                     if (!base.alive()) {
                         team_base_score -= config_.arena.base_kill_points();
                     }
                 } else {
-                    if (damage_dealt > 0.0f && config_.arena.base_bullet_damage > 0.0f) {
-                        const float hits = damage_dealt / config_.arena.base_bullet_damage;
+                    if (damage_dealt > 0.0f && config_.arena.world.base_bullet_damage > 0.0f) {
+                        const float hits = damage_dealt / config_.arena.world.base_bullet_damage;
                         team_base_score += config_.arena.base_hit_points * hits;
                     }
                     if (!base.alive()) {
@@ -535,7 +544,7 @@ void TeamSkirmishSession::score_featured_match() {
         const std::size_t team_id = match_teams[t_idx];
         auto& pool = team_pools_[team_id];
         const std::size_t num_squads = pool.squad_population.size();
-        const std::size_t fpq = config_.arena.fighters_per_squad;
+        const std::size_t fpq = config_.arena.world.fighters_per_squad;
 
         for (std::size_t sq = 0; sq < num_squads; ++sq) {
             float squad_sum = 0.0f;
@@ -615,8 +624,8 @@ void TeamSkirmishSession::run_background_work(int budget_ms) {
         // Build assignments for this background match
         auto bg_assignments = build_ship_assignments(
             team_pools_, match_schedule_[bg_match_idx_],
-            config_.arena.num_squads_per_team,
-            config_.arena.fighters_per_squad);
+            config_.arena.world.num_squads,
+            config_.arena.world.fighters_per_squad);
 
         // Run the background match to completion
         auto result = run_team_skirmish_match(
@@ -637,7 +646,7 @@ void TeamSkirmishSession::run_background_work(int budget_ms) {
             const std::size_t team_id = match_teams[t_idx];
             auto& pool = team_pools_[team_id];
             const std::size_t num_squads = pool.squad_population.size();
-            const std::size_t fpq = config_.arena.fighters_per_squad;
+            const std::size_t fpq = config_.arena.world.fighters_per_squad;
 
             for (std::size_t sq = 0; sq < num_squads; ++sq) {
                 float squad_sum = 0.0f;
