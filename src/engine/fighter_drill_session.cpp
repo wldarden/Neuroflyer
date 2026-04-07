@@ -73,6 +73,11 @@ void FighterDrillSession::tick() {
     if (phase_ == DrillPhase::Done) return;
 
     auto events = world_.tick();
+    process_tick_events(events);
+}
+
+void FighterDrillSession::process_tick_events(const TickEvents& events) {
+    if (phase_ == DrillPhase::Done) return;
 
     // Phase-based movement scoring
     compute_phase_scores();

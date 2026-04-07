@@ -15,6 +15,7 @@ public:
     ArenaSession(const ArenaConfig& config, uint32_t seed);
 
     void tick();
+    void process_tick_events(const TickEvents& events);
     void set_ship_actions(std::size_t idx,
                           bool up, bool down, bool left, bool right, bool shoot);
     void apply_boundary_rules();
@@ -31,6 +32,9 @@ public:
     [[nodiscard]] std::size_t teams_alive() const { return world_.teams_alive(); }
     [[nodiscard]] const std::vector<int>& enemy_kills() const noexcept { return world_.enemy_kills(); }
     [[nodiscard]] const std::vector<int>& ally_kills() const noexcept { return world_.ally_kills(); }
+
+    [[nodiscard]] ArenaWorld& world() noexcept { return world_; }
+    [[nodiscard]] const ArenaWorld& world() const noexcept { return world_; }
 
     [[nodiscard]] std::vector<Triangle>& ships() noexcept { return world_.ships(); }
     [[nodiscard]] const std::vector<Triangle>& ships() const noexcept { return world_.ships(); }

@@ -60,6 +60,7 @@ public:
     FighterDrillSession(const FighterDrillConfig& config, uint32_t seed);
 
     void tick();
+    void process_tick_events(const TickEvents& events);
     void set_ship_actions(std::size_t idx,
                           bool up, bool down, bool left, bool right, bool shoot);
 
@@ -68,6 +69,9 @@ public:
     [[nodiscard]] DrillPhase phase() const noexcept { return phase_; }
     [[nodiscard]] uint32_t phase_ticks_remaining() const noexcept;
     [[nodiscard]] std::vector<float> get_scores() const { return scores_; }
+
+    [[nodiscard]] ArenaWorld& world() noexcept { return world_; }
+    [[nodiscard]] const ArenaWorld& world() const noexcept { return world_; }
 
     [[nodiscard]] std::vector<Triangle>& ships() noexcept { return world_.ships(); }
     [[nodiscard]] const std::vector<Triangle>& ships() const noexcept { return world_.ships(); }

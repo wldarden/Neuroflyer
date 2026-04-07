@@ -13,6 +13,11 @@ void ArenaSession::tick() {
     if (over_) return;
 
     auto events = world_.tick();
+    process_tick_events(events);
+}
+
+void ArenaSession::process_tick_events(const TickEvents& events) {
+    if (over_) return;
 
     // Track survival ticks for alive ships
     for (std::size_t i = 0; i < world_.ships().size(); ++i) {

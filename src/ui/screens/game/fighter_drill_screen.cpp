@@ -4,6 +4,7 @@
 
 #include <neuroflyer/app_state.h>
 #include <neuroflyer/arena_sensor.h>
+#include <neuroflyer/arena_tick.h>
 #include <neuroflyer/renderer.h>
 #include <neuroflyer/sensor_engine.h>
 #include <neuroflyer/snapshot_io.h>
@@ -294,49 +295,40 @@ bool FighterDrillScreen::handle_input(UIManager& ui) {
 void FighterDrillScreen::run_tick() {
     if (!session_ || session_->is_over()) return;
 
-    DrillPhase phase = session_->phase();
+    const DrillPhase phase = session_->phase();
     const auto& ships = session_->ships();
 
+    // Build scripted squad leader inputs per ship
+    std::vector<SquadLeaderFighterInputs> sl_inputs(ships.size());
     for (std::size_t i = 0; i < ships.size(); ++i) {
         if (!ships[i].alive) continue;
 
-        // Compute scripted squad inputs per phase
-        float spacing = 0.0f;
-        float aggression = 0.0f;
-        float squad_target_heading = 0.0f;
-        float squad_target_distance = 0.0f;
+        SquadLeaderFighterInputs& sl = sl_inputs[i];
 
         switch (phase) {
         case DrillPhase::Expand:
-            spacing = 1.0f;
-            aggression = 0.0f;
-            squad_target_heading = 0.0f;
-            squad_target_distance = 0.0f;
+            sl.spacing = 1.0f;
+            sl.aggression = 0.0f;
             break;
         case DrillPhase::Contract:
-            spacing = -1.0f;
-            aggression = 0.0f;
-            squad_target_heading = 0.0f;
-            squad_target_distance = 0.0f;
+            sl.spacing = -1.0f;
+            sl.aggression = 0.0f;
             break;
         case DrillPhase::Attack: {
-            spacing = 0.0f;
-            aggression = 1.0f;
+            sl.spacing = 0.0f;
+            sl.aggression = 1.0f;
             // Compute heading/distance to starbase
             const auto& starbase = session_->starbase();
             auto dr = compute_dir_range(
                 ships[i].x, ships[i].y,
                 starbase.x, starbase.y,
                 drill_config_.world.world_width, drill_config_.world.world_height);
-            // Convert to relative heading: ship facing is (sin(rot), -cos(rot)),
-            // so the world angle matching that convention is atan2(dx, -dy)
             float abs_heading = std::atan2(dr.dir_sin, -dr.dir_cos);
             float rel = abs_heading - ships[i].rotation;
-            // Normalize to [-pi, pi]
             while (rel > std::numbers::pi_v<float>) rel -= 2.0f * std::numbers::pi_v<float>;
             while (rel < -std::numbers::pi_v<float>) rel += 2.0f * std::numbers::pi_v<float>;
-            squad_target_heading = rel / std::numbers::pi_v<float>;  // normalize to [-1, 1]
-            squad_target_distance = dr.range;
+            sl.squad_target_heading = rel / std::numbers::pi_v<float>;
+            sl.squad_target_distance = dr.range;
             break;
         }
         case DrillPhase::Done:
@@ -344,8 +336,6 @@ void FighterDrillScreen::run_tick() {
         }
 
         // Compute center heading/distance
-        float squad_center_heading = 0.0f;
-        float squad_center_distance = 0.0f;
         {
             auto dr = compute_dir_range(
                 ships[i].x, ships[i].y,
@@ -355,39 +345,28 @@ void FighterDrillScreen::run_tick() {
             float rel = abs_heading - ships[i].rotation;
             while (rel > std::numbers::pi_v<float>) rel -= 2.0f * std::numbers::pi_v<float>;
             while (rel < -std::numbers::pi_v<float>) rel += 2.0f * std::numbers::pi_v<float>;
-            squad_center_heading = rel / std::numbers::pi_v<float>;
-            squad_center_distance = dr.range;
+            sl.squad_center_heading = rel / std::numbers::pi_v<float>;
+            sl.squad_center_distance = dr.range;
         }
-
-        // Build arena sensor input context
-        // All ships on same team (0) — they see each other as friendly
-        auto ctx = ArenaQueryContext::for_ship(
-            ships[i], i, 0,
-            drill_config_.world.world_width, drill_config_.world.world_height,
-            session_->towers(), session_->tokens(),
-            session_->ships(), drill_ship_teams_, session_->bullets());
-
-        auto input = build_arena_ship_input(
-            ship_design_, ctx,
-            squad_target_heading, squad_target_distance,
-            squad_center_heading, squad_center_distance,
-            aggression, spacing,
-            recurrent_states_[i]);
-
-        // Capture input for followed ship
-        if (static_cast<int>(i) == selected_ship_) {
-            last_input_ = input;
-        }
-
-        auto output = nets_[i].forward(input);
-        auto decoded = decode_output(output, ship_design_.memory_slots);
-
-        session_->set_ship_actions(i, decoded.up, decoded.down,
-                                   decoded.left, decoded.right, decoded.shoot);
-        recurrent_states_[i] = decoded.memory;
     }
 
-    session_->tick();
+    // Prepare capture vector for followed ship's input
+    std::vector<std::vector<float>> fighter_inputs_capture(ships.size());
+
+    // Run nets + physics via tick function
+    auto events = tick_fighters_scripted(
+        session_->world(), ship_design_, nets_,
+        sl_inputs, recurrent_states_, drill_ship_teams_,
+        &fighter_inputs_capture);
+
+    // Capture followed ship's input for net viewer
+    if (selected_ship_ >= 0
+        && static_cast<std::size_t>(selected_ship_) < fighter_inputs_capture.size()) {
+        last_input_ = fighter_inputs_capture[static_cast<std::size_t>(selected_ship_)];
+    }
+
+    // Process scoring + phase transitions
+    session_->process_tick_events(events);
 }
 
 // ==================== Evolution ====================

@@ -92,6 +92,11 @@ void AttackRunSession::tick() {
     if (phase_ == AttackRunPhase::Done) return;
 
     auto events = world_.tick();
+    process_tick_events(events);
+}
+
+void AttackRunSession::process_tick_events(const TickEvents& events) {
+    if (phase_ == AttackRunPhase::Done) return;
 
     // Phase-based movement scoring
     compute_phase_scores();

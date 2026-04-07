@@ -4,6 +4,7 @@
 
 #include <neuroflyer/app_state.h>
 #include <neuroflyer/arena_sensor.h>
+#include <neuroflyer/arena_tick.h>
 #include <neuroflyer/renderer.h>
 #include <neuroflyer/sensor_engine.h>
 #include <neuroflyer/snapshot_io.h>
@@ -296,14 +297,14 @@ void AttackRunScreen::run_tick() {
 
     const auto& ships = session_->ships();
 
+    // Build scripted squad leader inputs per ship (all attack-style)
+    std::vector<SquadLeaderFighterInputs> sl_inputs(ships.size());
     for (std::size_t i = 0; i < ships.size(); ++i) {
         if (!ships[i].alive) continue;
 
-        // All phases use attack-style squad inputs
-        float spacing = 0.0f;
-        float aggression = 1.0f;
-        float squad_target_heading = 0.0f;
-        float squad_target_distance = 0.0f;
+        SquadLeaderFighterInputs& sl = sl_inputs[i];
+        sl.spacing = 0.0f;
+        sl.aggression = 1.0f;
 
         if (session_->starbase().alive()) {
             const auto& starbase = session_->starbase();
@@ -315,13 +316,11 @@ void AttackRunScreen::run_tick() {
             float rel = abs_heading - ships[i].rotation;
             while (rel > std::numbers::pi_v<float>) rel -= 2.0f * std::numbers::pi_v<float>;
             while (rel < -std::numbers::pi_v<float>) rel += 2.0f * std::numbers::pi_v<float>;
-            squad_target_heading = rel / std::numbers::pi_v<float>;
-            squad_target_distance = dr.range;
+            sl.squad_target_heading = rel / std::numbers::pi_v<float>;
+            sl.squad_target_distance = dr.range;
         }
 
         // Compute center heading/distance
-        float squad_center_heading = 0.0f;
-        float squad_center_distance = 0.0f;
         {
             auto dr = compute_dir_range(
                 ships[i].x, ships[i].y,
@@ -331,39 +330,28 @@ void AttackRunScreen::run_tick() {
             float rel = abs_heading - ships[i].rotation;
             while (rel > std::numbers::pi_v<float>) rel -= 2.0f * std::numbers::pi_v<float>;
             while (rel < -std::numbers::pi_v<float>) rel += 2.0f * std::numbers::pi_v<float>;
-            squad_center_heading = rel / std::numbers::pi_v<float>;
-            squad_center_distance = dr.range;
+            sl.squad_center_heading = rel / std::numbers::pi_v<float>;
+            sl.squad_center_distance = dr.range;
         }
-
-        // Build arena sensor input context
-        // All ships on same team (0) — they see each other as friendly
-        auto ctx = ArenaQueryContext::for_ship(
-            ships[i], i, 0,
-            config_.world.world_width, config_.world.world_height,
-            session_->towers(), session_->tokens(),
-            session_->ships(), drill_ship_teams_, session_->bullets());
-
-        auto input = build_arena_ship_input(
-            ship_design_, ctx,
-            squad_target_heading, squad_target_distance,
-            squad_center_heading, squad_center_distance,
-            aggression, spacing,
-            recurrent_states_[i]);
-
-        // Capture input for followed ship
-        if (static_cast<int>(i) == selected_ship_) {
-            last_input_ = input;
-        }
-
-        auto output = nets_[i].forward(input);
-        auto decoded = decode_output(output, ship_design_.memory_slots);
-
-        session_->set_ship_actions(i, decoded.up, decoded.down,
-                                   decoded.left, decoded.right, decoded.shoot);
-        recurrent_states_[i] = decoded.memory;
     }
 
-    session_->tick();
+    // Prepare capture vector for followed ship's input
+    std::vector<std::vector<float>> fighter_inputs_capture(ships.size());
+
+    // Run nets + physics via tick function
+    auto events = tick_fighters_scripted(
+        session_->world(), ship_design_, nets_,
+        sl_inputs, recurrent_states_, drill_ship_teams_,
+        &fighter_inputs_capture);
+
+    // Capture followed ship's input for net viewer
+    if (selected_ship_ >= 0
+        && static_cast<std::size_t>(selected_ship_) < fighter_inputs_capture.size()) {
+        last_input_ = fighter_inputs_capture[static_cast<std::size_t>(selected_ship_)];
+    }
+
+    // Process scoring + phase transitions
+    session_->process_tick_events(events);
 }
 
 // ==================== Evolution ====================
