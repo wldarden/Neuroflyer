@@ -41,6 +41,7 @@ add_executable(neuroflyer_tests
     ../src/engine/attack_run_session.cpp
     ../src/engine/skirmish.cpp
     ../src/engine/skirmish_tournament.cpp
+    ../src/engine/team_skirmish.cpp
 )
 target_include_directories(neuroflyer_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../include
