@@ -86,6 +86,7 @@ add_executable(neuroflyer
     src/engine/skirmish.cpp
     src/engine/skirmish_tournament.cpp
     src/engine/team_skirmish.cpp
+    src/engine/arena_tick.cpp
     src/engine/paths.cpp
 
     # UI — SDL/ImGui rendering and interaction

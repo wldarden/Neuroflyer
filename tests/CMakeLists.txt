@@ -25,6 +25,7 @@ add_executable(neuroflyer_tests
     skirmish_tournament_test.cpp
     team_skirmish_test.cpp
     arena_world_test.cpp
+    arena_tick_test.cpp
     ../src/engine/game.cpp
     ../src/engine/arena_session.cpp
     ../src/engine/arena_world.cpp
@@ -45,6 +46,7 @@ add_executable(neuroflyer_tests
     ../src/engine/skirmish.cpp
     ../src/engine/skirmish_tournament.cpp
     ../src/engine/team_skirmish.cpp
+    ../src/engine/arena_tick.cpp
 )
 target_include_directories(neuroflyer_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../include
