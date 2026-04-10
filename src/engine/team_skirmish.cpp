@@ -1,6 +1,7 @@
 // src/engine/team_skirmish.cpp
 #include <neuroflyer/team_skirmish.h>
 #include <neuroflyer/arena_sensor.h>
+#include <neuroflyer/entity_grid.h>
 #include <neuroflyer/sector_grid.h>
 #include <neuroflyer/sensor_engine.h>
 
@@ -178,6 +179,10 @@ void tick_team_arena_match(
         }
     }
 
+    auto sensor_grid = build_sensor_grid(fighter_design,
+        arena_config.world.world_width, arena_config.world.world_height,
+        arena.ships(), arena.towers(), arena.tokens(), arena.bullets());
+
     for (std::size_t i = 0; i < total_ships; ++i) {
         if (!arena.ships()[i].alive) continue;
 
@@ -206,6 +211,7 @@ void tick_team_arena_match(
             arena_config.world.world_width, arena_config.world.world_height,
             arena.towers(), arena.tokens(),
             arena.ships(), ship_teams, arena.bullets());
+        ctx.grid = &sensor_grid;
 
         auto input = build_arena_ship_input(
             fighter_design, ctx,

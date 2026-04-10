@@ -1,4 +1,5 @@
 #include <neuroflyer/arena_match.h>
+#include <neuroflyer/entity_grid.h>
 #include <neuroflyer/sector_grid.h>
 #include <neuroflyer/sensor_engine.h>
 #include <neuroflyer/squad_leader.h>
@@ -138,6 +139,11 @@ ArenaMatchResult run_arena_match(
                 stats.centroid_y / arena_config.world.world_height);
         }
 
+        // Build sensor grid for this tick
+        auto sensor_grid = build_sensor_grid(fighter_design,
+            arena_config.world.world_width, arena_config.world.world_height,
+            arena.ships(), arena.towers(), arena.tokens(), arena.bullets());
+
         // For each alive ship: build input, run fighter net, decode output, set actions
         for (std::size_t i = 0; i < total_ships; ++i) {
             if (!arena.ships()[i].alive) continue;
@@ -159,6 +165,7 @@ ArenaMatchResult run_arena_match(
                 arena_config.world.world_width, arena_config.world.world_height,
                 arena.towers(), arena.tokens(),
                 arena.ships(), ship_teams, arena.bullets());
+            ctx.grid = &sensor_grid;
 
             // Build fighter input
             auto input = build_arena_ship_input(

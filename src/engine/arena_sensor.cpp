@@ -1,6 +1,7 @@
 #include <neuroflyer/arena_config.h>
 #include <neuroflyer/arena_sensor.h>
 #include <neuroflyer/collision.h>
+#include <neuroflyer/entity_grid.h>
 #include <neuroflyer/sensor_engine.h>
 
 #include <algorithm>
@@ -46,38 +47,85 @@ ArenaSensorReading query_arena_raycast(
         }
     };
 
-    for (const auto& tower : ctx.towers) {
-        if (!tower.alive) continue;
-        float d = ray_circle_hit(ctx.ship_x, ctx.ship_y, dx, dy, sensor.range,
-                                 tower.x, tower.y, tower.radius);
-        update_closest(d, ArenaHitType::Tower);
-    }
+    if (ctx.grid) {
+        // Grid-accelerated: only check entities in nearby cells
+        ctx.grid->for_each_nearby(ctx.ship_x, ctx.ship_y, sensor.range,
+            [&](EntityType etype, uint32_t idx) {
+                switch (etype) {
+                case EntityType::Tower: {
+                    const auto& tower = ctx.towers[idx];
+                    if (!tower.alive) return;
+                    float d = ray_circle_hit(ctx.ship_x, ctx.ship_y, dx, dy, sensor.range,
+                                             tower.x, tower.y, tower.radius);
+                    update_closest(d, ArenaHitType::Tower);
+                    break;
+                }
+                case EntityType::Token: {
+                    const auto& token = ctx.tokens[idx];
+                    if (!token.alive) return;
+                    float d = ray_circle_hit(ctx.ship_x, ctx.ship_y, dx, dy, sensor.range,
+                                             token.x, token.y, token.radius);
+                    update_closest(d, ArenaHitType::Token);
+                    break;
+                }
+                case EntityType::Ship: {
+                    if (static_cast<std::size_t>(idx) == ctx.self_index) return;
+                    const auto& ship = ctx.ships[idx];
+                    if (!ship.alive) return;
+                    float d = ray_circle_hit(ctx.ship_x, ctx.ship_y, dx, dy, sensor.range,
+                                             ship.x, ship.y, Triangle::SIZE);
+                    bool is_friend = (idx < ctx.ship_teams.size() &&
+                                      ctx.ship_teams[idx] == ctx.self_team);
+                    update_closest(d, is_friend ? ArenaHitType::FriendlyShip
+                                                : ArenaHitType::EnemyShip);
+                    break;
+                }
+                case EntityType::Bullet: {
+                    const auto& bullet = ctx.bullets[idx];
+                    if (!bullet.alive) return;
+                    if (bullet.owner_index == static_cast<int>(ctx.self_index)) return;
+                    float d = ray_circle_hit(ctx.ship_x, ctx.ship_y, dx, dy, sensor.range,
+                                             bullet.x, bullet.y, BULLET_RADIUS);
+                    update_closest(d, ArenaHitType::Bullet);
+                    break;
+                }
+                }
+            });
+    } else {
+        // Brute-force fallback: iterate all entities
+        for (const auto& tower : ctx.towers) {
+            if (!tower.alive) continue;
+            float d = ray_circle_hit(ctx.ship_x, ctx.ship_y, dx, dy, sensor.range,
+                                     tower.x, tower.y, tower.radius);
+            update_closest(d, ArenaHitType::Tower);
+        }
 
-    for (const auto& token : ctx.tokens) {
-        if (!token.alive) continue;
-        float d = ray_circle_hit(ctx.ship_x, ctx.ship_y, dx, dy, sensor.range,
-                                 token.x, token.y, token.radius);
-        update_closest(d, ArenaHitType::Token);
-    }
+        for (const auto& token : ctx.tokens) {
+            if (!token.alive) continue;
+            float d = ray_circle_hit(ctx.ship_x, ctx.ship_y, dx, dy, sensor.range,
+                                     token.x, token.y, token.radius);
+            update_closest(d, ArenaHitType::Token);
+        }
 
-    for (std::size_t i = 0; i < ctx.ships.size(); ++i) {
-        if (i == ctx.self_index) continue;
-        const auto& ship = ctx.ships[i];
-        if (!ship.alive) continue;
-        float d = ray_circle_hit(ctx.ship_x, ctx.ship_y, dx, dy, sensor.range,
-                                 ship.x, ship.y, Triangle::SIZE);
-        bool is_friend = (i < ctx.ship_teams.size() &&
-                          ctx.ship_teams[i] == ctx.self_team);
-        update_closest(d, is_friend ? ArenaHitType::FriendlyShip
-                                    : ArenaHitType::EnemyShip);
-    }
+        for (std::size_t i = 0; i < ctx.ships.size(); ++i) {
+            if (i == ctx.self_index) continue;
+            const auto& ship = ctx.ships[i];
+            if (!ship.alive) continue;
+            float d = ray_circle_hit(ctx.ship_x, ctx.ship_y, dx, dy, sensor.range,
+                                     ship.x, ship.y, Triangle::SIZE);
+            bool is_friend = (i < ctx.ship_teams.size() &&
+                              ctx.ship_teams[i] == ctx.self_team);
+            update_closest(d, is_friend ? ArenaHitType::FriendlyShip
+                                        : ArenaHitType::EnemyShip);
+        }
 
-    for (const auto& bullet : ctx.bullets) {
-        if (!bullet.alive) continue;
-        if (bullet.owner_index == static_cast<int>(ctx.self_index)) continue;
-        float d = ray_circle_hit(ctx.ship_x, ctx.ship_y, dx, dy, sensor.range,
-                                 bullet.x, bullet.y, BULLET_RADIUS);
-        update_closest(d, ArenaHitType::Bullet);
+        for (const auto& bullet : ctx.bullets) {
+            if (!bullet.alive) continue;
+            if (bullet.owner_index == static_cast<int>(ctx.self_index)) continue;
+            float d = ray_circle_hit(ctx.ship_x, ctx.ship_y, dx, dy, sensor.range,
+                                     bullet.x, bullet.y, BULLET_RADIUS);
+            update_closest(d, ArenaHitType::Bullet);
+        }
     }
 
     return {closest, closest_type};
@@ -104,41 +152,89 @@ ArenaSensorReading query_arena_occulus(
         }
     };
 
-    for (const auto& tower : ctx.towers) {
-        if (!tower.alive) continue;
-        update_closest(
-            ellipse_overlap_distance(shape, ctx.ship_x, ctx.ship_y,
-                                      tower.x, tower.y, tower.radius),
-            ArenaHitType::Tower);
-    }
+    if (ctx.grid) {
+        ctx.grid->for_each_nearby(ctx.ship_x, ctx.ship_y, sensor.range,
+            [&](EntityType etype, uint32_t idx) {
+                switch (etype) {
+                case EntityType::Tower: {
+                    const auto& tower = ctx.towers[idx];
+                    if (!tower.alive) return;
+                    update_closest(
+                        ellipse_overlap_distance(shape, ctx.ship_x, ctx.ship_y,
+                                                  tower.x, tower.y, tower.radius),
+                        ArenaHitType::Tower);
+                    break;
+                }
+                case EntityType::Token: {
+                    const auto& token = ctx.tokens[idx];
+                    if (!token.alive) return;
+                    update_closest(
+                        ellipse_overlap_distance(shape, ctx.ship_x, ctx.ship_y,
+                                                  token.x, token.y, token.radius),
+                        ArenaHitType::Token);
+                    break;
+                }
+                case EntityType::Ship: {
+                    if (static_cast<std::size_t>(idx) == ctx.self_index) return;
+                    const auto& ship = ctx.ships[idx];
+                    if (!ship.alive) return;
+                    bool is_friend = (idx < ctx.ship_teams.size() &&
+                                      ctx.ship_teams[idx] == ctx.self_team);
+                    update_closest(
+                        ellipse_overlap_distance(shape, ctx.ship_x, ctx.ship_y,
+                                                  ship.x, ship.y, Triangle::SIZE),
+                        is_friend ? ArenaHitType::FriendlyShip : ArenaHitType::EnemyShip);
+                    break;
+                }
+                case EntityType::Bullet: {
+                    const auto& bullet = ctx.bullets[idx];
+                    if (!bullet.alive) return;
+                    if (bullet.owner_index == static_cast<int>(ctx.self_index)) return;
+                    update_closest(
+                        ellipse_overlap_distance(shape, ctx.ship_x, ctx.ship_y,
+                                                  bullet.x, bullet.y, BULLET_RADIUS),
+                        ArenaHitType::Bullet);
+                    break;
+                }
+                }
+            });
+    } else {
+        for (const auto& tower : ctx.towers) {
+            if (!tower.alive) continue;
+            update_closest(
+                ellipse_overlap_distance(shape, ctx.ship_x, ctx.ship_y,
+                                          tower.x, tower.y, tower.radius),
+                ArenaHitType::Tower);
+        }
 
-    for (const auto& token : ctx.tokens) {
-        if (!token.alive) continue;
-        update_closest(
-            ellipse_overlap_distance(shape, ctx.ship_x, ctx.ship_y,
-                                      token.x, token.y, token.radius),
-            ArenaHitType::Token);
-    }
+        for (const auto& token : ctx.tokens) {
+            if (!token.alive) continue;
+            update_closest(
+                ellipse_overlap_distance(shape, ctx.ship_x, ctx.ship_y,
+                                          token.x, token.y, token.radius),
+                ArenaHitType::Token);
+        }
 
-    for (std::size_t i = 0; i < ctx.ships.size(); ++i) {
-        if (i == ctx.self_index) continue;
-        const auto& ship = ctx.ships[i];
-        if (!ship.alive) continue;
-        bool is_friend = (i < ctx.ship_teams.size() &&
-                          ctx.ship_teams[i] == ctx.self_team);
-        update_closest(
-            ellipse_overlap_distance(shape, ctx.ship_x, ctx.ship_y,
-                                      ship.x, ship.y, Triangle::SIZE),
-            is_friend ? ArenaHitType::FriendlyShip : ArenaHitType::EnemyShip);
-    }
+        for (std::size_t i = 0; i < ctx.ships.size(); ++i) {
+            if (i == ctx.self_index) continue;
+            const auto& ship = ctx.ships[i];
+            if (!ship.alive) continue;
+            bool is_friend = (i < ctx.ship_teams.size() &&
+                              ctx.ship_teams[i] == ctx.self_team);
+            update_closest(
+                ellipse_overlap_distance(shape, ctx.ship_x, ctx.ship_y,
+                                          ship.x, ship.y, Triangle::SIZE),
+                is_friend ? ArenaHitType::FriendlyShip : ArenaHitType::EnemyShip);
+        }
 
-    for (const auto& bullet : ctx.bullets) {
-        if (!bullet.alive) continue;
-        if (bullet.owner_index == static_cast<int>(ctx.self_index)) continue;
-        update_closest(
-            ellipse_overlap_distance(shape, ctx.ship_x, ctx.ship_y,
-                                      bullet.x, bullet.y, BULLET_RADIUS),
-            ArenaHitType::Bullet);
+        for (const auto& bullet : ctx.bullets) {
+            if (!bullet.alive) continue;
+            if (bullet.owner_index == static_cast<int>(ctx.self_index)) continue;
+            update_closest(
+                ellipse_overlap_distance(shape, ctx.ship_x, ctx.ship_y,
+                                          bullet.x, bullet.y, BULLET_RADIUS),
+                ArenaHitType::Bullet);
+        }
     }
 
     return {closest_dist, closest_type};
@@ -182,6 +278,38 @@ ArenaSensorReading query_arena_sensor(
     default:
         return query_arena_raycast(sensor, ctx);
     }
+}
+
+EntityGrid build_sensor_grid(
+    const ShipDesign& design,
+    float world_w, float world_h,
+    std::span<const Triangle> ships,
+    std::span<const Tower> towers,
+    std::span<const Token> tokens,
+    std::span<const Bullet> bullets) {
+
+    float max_range = 0;
+    for (const auto& s : design.sensors) {
+        max_range = std::max(max_range, s.range);
+    }
+
+    // Minimum cell size avoids creating millions of cells when sensors have
+    // zero or very small range. Cap at world_size/50 as a floor.
+    const float min_cell = std::max(world_w, world_h) / 50.0f;
+    EntityGrid grid(world_w, world_h, std::max(max_range, min_cell));
+    for (uint32_t i = 0; i < ships.size(); ++i) {
+        if (ships[i].alive) grid.insert(ships[i].x, ships[i].y, EntityType::Ship, i);
+    }
+    for (uint32_t i = 0; i < towers.size(); ++i) {
+        if (towers[i].alive) grid.insert(towers[i].x, towers[i].y, EntityType::Tower, i);
+    }
+    for (uint32_t i = 0; i < tokens.size(); ++i) {
+        if (tokens[i].alive) grid.insert(tokens[i].x, tokens[i].y, EntityType::Token, i);
+    }
+    for (uint32_t i = 0; i < bullets.size(); ++i) {
+        if (bullets[i].alive) grid.insert(bullets[i].x, bullets[i].y, EntityType::Bullet, i);
+    }
+    return grid;
 }
 
 DirRange compute_dir_range(

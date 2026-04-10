@@ -77,6 +77,7 @@ add_executable(neuroflyer
     src/engine/ray.cpp
     src/engine/sensor_engine.cpp
     src/engine/arena_sensor.cpp
+    src/engine/entity_grid.cpp
     src/engine/team_evolution.cpp
     src/engine/arena_match.cpp
     src/engine/sector_grid.cpp
@@ -149,3 +150,34 @@ target_link_libraries(neuroflyer PRIVATE
 )
 
 add_subdirectory(tests)
+
+# GraphNetwork performance demo (standalone, no UI framework)
+add_executable(graph_skirmish_demo
+    src/demos/graph_skirmish_demo.cpp
+
+    # Engine sources needed for arena simulation
+    src/engine/arena_world.cpp
+    src/engine/arena_session.cpp
+    src/engine/arena_tick.cpp
+    src/engine/arena_sensor.cpp
+    src/engine/entity_grid.cpp
+    src/engine/sensor_engine.cpp
+    src/engine/squad_leader.cpp
+    src/engine/sector_grid.cpp
+    src/engine/team_skirmish.cpp
+    src/engine/evolution.cpp
+    src/engine/team_evolution.cpp
+    src/engine/snapshot_io.cpp
+    src/engine/game.cpp
+    src/engine/config.cpp
+    src/engine/paths.cpp
+
+    # Rendering (ArenaGameView only — no UIManager)
+    src/ui/views/arena_game_view.cpp
+)
+target_include_directories(graph_skirmish_demo PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+target_link_libraries(graph_skirmish_demo PRIVATE
+    neuralnet evolve SDL2::SDL2 imgui_lib nlohmann_json::nlohmann_json project_warnings
+)

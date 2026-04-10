@@ -37,6 +37,7 @@ add_executable(neuroflyer_tests
     ../src/engine/genome_manager.cpp
     ../src/engine/mrca_tracker.cpp
     ../src/engine/arena_sensor.cpp
+    ../src/engine/entity_grid.cpp
     ../src/engine/team_evolution.cpp
     ../src/engine/arena_match.cpp
     ../src/engine/sector_grid.cpp

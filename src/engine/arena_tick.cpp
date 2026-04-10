@@ -1,5 +1,6 @@
 #include <neuroflyer/arena_tick.h>
 #include <neuroflyer/arena_sensor.h>
+#include <neuroflyer/entity_grid.h>
 #include <neuroflyer/sector_grid.h>
 #include <neuroflyer/sensor_engine.h>
 
@@ -20,6 +21,10 @@ TickEvents tick_fighters_scripted(
     const auto& ships = world.ships();
     const auto& wc = world.config();
 
+    auto sensor_grid = build_sensor_grid(fighter_design,
+        wc.world_width, wc.world_height,
+        world.ships(), world.towers(), world.tokens(), world.bullets());
+
     for (std::size_t i = 0; i < ships.size(); ++i) {
         if (!ships[i].alive) continue;
 
@@ -30,6 +35,7 @@ TickEvents tick_fighters_scripted(
             wc.world_width, wc.world_height,
             world.towers(), world.tokens(),
             world.ships(), ship_teams, world.bullets());
+        ctx.grid = &sensor_grid;
 
         auto input = build_arena_ship_input(
             fighter_design, ctx,
@@ -191,6 +197,10 @@ TickEvents tick_arena_with_leader(
     }
 
     // Per fighter: compute SL inputs, build sensor input, forward net
+    auto sensor_grid = build_sensor_grid(fighter_design,
+        config.world_width, config.world_height,
+        world.ships(), world.towers(), world.tokens(), world.bullets());
+
     for (std::size_t i = 0; i < total_ships; ++i) {
         if (!ships[i].alive) continue;
 
@@ -213,6 +223,7 @@ TickEvents tick_arena_with_leader(
             config.world_width, config.world_height,
             world.towers(), world.tokens(),
             world.ships(), ship_teams, world.bullets());
+        ctx.grid = &sensor_grid;
 
         auto input = build_arena_ship_input(
             fighter_design, ctx,

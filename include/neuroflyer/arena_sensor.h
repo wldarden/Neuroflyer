@@ -1,5 +1,6 @@
 #pragma once
 
+#include <neuroflyer/entity_grid.h>
 #include <neuroflyer/game.h>
 #include <neuroflyer/base.h>
 #include <neuroflyer/ship_design.h>
@@ -33,6 +34,10 @@ struct ArenaQueryContext {
     std::span<const Triangle> ships;
     std::span<const int> ship_teams;   // parallel to ships
     std::span<const Bullet> bullets;
+
+    // Optional spatial acceleration — if set, sensor queries check only
+    // nearby grid cells instead of iterating all entities.
+    const EntityGrid* grid = nullptr;
 
     /// Build a context for querying sensors from a specific ship's perspective.
     [[nodiscard]] static ArenaQueryContext for_ship(
@@ -78,6 +83,16 @@ struct DirRange {
     float squad_center_heading, float squad_center_distance,
     float aggression, float spacing,
     std::span<const float> memory);
+
+/// Build an EntityGrid populated with all alive entities from the given spans.
+/// Cell size is set to the max sensor range from the ShipDesign.
+[[nodiscard]] EntityGrid build_sensor_grid(
+    const ShipDesign& design,
+    float world_w, float world_h,
+    std::span<const Triangle> ships,
+    std::span<const Tower> towers,
+    std::span<const Token> tokens,
+    std::span<const Bullet> bullets);
 
 /// Build input labels for arena fighter nets.
 [[nodiscard]] std::vector<std::string> build_arena_fighter_input_labels(const ShipDesign& design);
