@@ -468,3 +468,62 @@ TEST(EvolutionTest, MlpToGraphGenomeMultipleHiddenLayers) {
     EXPECT_EQ(output.size(), 1u);
 }
 
+TEST(EvolutionTest, MlpToGraphWithWeightsPreservesValues) {
+    std::mt19937 rng(42);
+    auto ind = nf::Individual::random(3, {2}, 1, rng);
+    auto net_mlp = ind.build_network();
+
+    nf::Snapshot snap;
+    snap.topology = ind.topology;
+    snap.ship_design = nf::ShipDesign{};
+    for (std::size_t l = 0; l < ind.topology.layers.size(); ++l) {
+        std::string lp = "layer_" + std::to_string(l);
+        if (ind.genome.has_gene(lp + "_weights")) {
+            const auto& wg = ind.genome.gene(lp + "_weights");
+            snap.weights.insert(snap.weights.end(), wg.values.begin(), wg.values.end());
+        }
+        if (ind.genome.has_gene(lp + "_biases")) {
+            const auto& bg = ind.genome.gene(lp + "_biases");
+            snap.weights.insert(snap.weights.end(), bg.values.begin(), bg.values.end());
+        }
+    }
+
+    auto genome = mlp_snapshot_to_graph_genome_with_weights(snap);
+    neuralnet::GraphNetwork net_graph(genome);
+
+    std::vector<float> input = {0.5f, -0.3f, 0.8f};
+    auto out_mlp = net_mlp.forward(input);
+    auto out_graph = net_graph.forward(input);
+
+    ASSERT_EQ(out_mlp.size(), out_graph.size());
+    for (std::size_t i = 0; i < out_mlp.size(); ++i) {
+        EXPECT_NEAR(out_mlp[i], out_graph[i], 1e-5f) << "output " << i;
+    }
+}
+
+TEST(EvolutionTest, MlpToGraphWithWeightsTargetInputSize) {
+    std::mt19937 rng(42);
+    auto ind = nf::Individual::random(3, {2}, 1, rng);
+
+    nf::Snapshot snap;
+    snap.topology = ind.topology;
+    snap.ship_design = nf::ShipDesign{};
+    for (std::size_t l = 0; l < ind.topology.layers.size(); ++l) {
+        std::string lp = "layer_" + std::to_string(l);
+        if (ind.genome.has_gene(lp + "_weights"))
+            for (auto v : ind.genome.gene(lp + "_weights").values) snap.weights.push_back(v);
+        if (ind.genome.has_gene(lp + "_biases"))
+            for (auto v : ind.genome.gene(lp + "_biases").values) snap.weights.push_back(v);
+    }
+
+    auto genome = mlp_snapshot_to_graph_genome_with_weights(snap, 5, 1);
+    neuralnet::GraphNetwork net(genome);
+
+    EXPECT_EQ(net.input_size(), 5u);
+    EXPECT_EQ(net.output_size(), 1u);
+
+    std::vector<float> input(5, 0.5f);
+    auto output = net.forward(input);
+    EXPECT_EQ(output.size(), 1u);
+}
+
