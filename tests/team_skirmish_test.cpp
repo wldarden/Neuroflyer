@@ -181,7 +181,7 @@ TEST_F(TeamSkirmishMatchTest, CompletesAndReturnsCorrectShipCount) {
     const auto assignments = nf::build_ship_assignments(
         pools, match_teams, squads_per_team, fighters_per_squad);
 
-    const auto result = nf::run_team_skirmish_match(cfg, design, pools, assignments, 42u);
+    const auto result = nf::run_team_skirmish_match(cfg, design, pools, match_teams, assignments, 42u);
 
     EXPECT_TRUE(result.completed);
     EXPECT_GT(result.ticks_elapsed, 0u);
@@ -203,7 +203,7 @@ TEST_F(TeamSkirmishMatchTest, ShipScoresAreFinite) {
     const auto assignments = nf::build_ship_assignments(
         pools, match_teams, squads_per_team, fighters_per_squad);
 
-    const auto result = nf::run_team_skirmish_match(cfg, design, pools, assignments, 77u);
+    const auto result = nf::run_team_skirmish_match(cfg, design, pools, match_teams, assignments, 77u);
 
     ASSERT_TRUE(result.completed);
     for (std::size_t i = 0; i < result.ship_scores.size(); ++i) {
@@ -228,7 +228,7 @@ TEST_F(TeamSkirmishMatchTest, EndsAtOrBeforeTimeLimit) {
     const auto assignments = nf::build_ship_assignments(
         pools, match_teams, squads_per_team, fighters_per_squad);
 
-    const auto result = nf::run_team_skirmish_match(cfg, design, pools, assignments, 55u);
+    const auto result = nf::run_team_skirmish_match(cfg, design, pools, match_teams, assignments, 55u);
 
     EXPECT_TRUE(result.completed);
     EXPECT_LE(result.ticks_elapsed, cfg.time_limit_ticks + 1u);

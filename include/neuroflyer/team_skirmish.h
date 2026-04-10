@@ -78,11 +78,13 @@ void tick_team_arena_match(
 
 /// Run a complete team skirmish match headlessly.
 /// Each team has per-squad NTM/leader nets and per-ship fighter nets.
+/// match_teams specifies which global team indices participate in this match.
 /// Returns per-ship scores for accumulation into team pools.
 [[nodiscard]] TeamSkirmishMatchResult run_team_skirmish_match(
     const SkirmishConfig& config,
     const ShipDesign& fighter_design,
     const std::vector<TeamPool>& team_pools,
+    const std::vector<std::size_t>& match_teams,
     const std::vector<ShipAssignment>& assignments,
     uint32_t seed);
 

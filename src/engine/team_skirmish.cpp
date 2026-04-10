@@ -243,10 +243,11 @@ TeamSkirmishMatchResult run_team_skirmish_match(
     const SkirmishConfig& config,
     const ShipDesign& fighter_design,
     const std::vector<TeamPool>& team_pools,
+    const std::vector<std::size_t>& match_teams,
     const std::vector<ShipAssignment>& assignments,
     uint32_t seed) {
 
-    const std::size_t num_teams = team_pools.size();
+    const std::size_t num_teams = match_teams.size();
 
     ArenaConfig arena_config;
     arena_config.world = config.world;
@@ -258,13 +259,13 @@ TeamSkirmishMatchResult run_team_skirmish_match(
 
     ArenaSession arena(arena_config, seed);
 
-    // Build per-team, per-squad/per-fighter networks
+    // Build per-team, per-squad/per-fighter networks (match-local indexing)
     std::vector<std::vector<neuralnet::Network>> team_ntm_nets(num_teams);
     std::vector<std::vector<neuralnet::Network>> team_leader_nets(num_teams);
     std::vector<std::vector<neuralnet::Network>> team_fighter_nets(num_teams);
 
     for (std::size_t t = 0; t < num_teams; ++t) {
-        const auto& pool = team_pools[t];
+        const auto& pool = team_pools[match_teams[t]];
         team_ntm_nets[t].reserve(pool.squad_population.size());
         team_leader_nets[t].reserve(pool.squad_population.size());
         for (const auto& sq : pool.squad_population) {
@@ -630,7 +631,7 @@ void TeamSkirmishSession::run_background_work(int budget_ms) {
         // Run the background match to completion
         auto result = run_team_skirmish_match(
             config_.arena, fighter_design_, team_pools_,
-            bg_assignments,
+            match_schedule_[bg_match_idx_], bg_assignments,
             static_cast<uint32_t>(rng_()));
 
         // Accumulate fighter scores
