@@ -158,6 +158,22 @@ void TeamSkirmishConfigScreen::on_draw(AppState& state, Renderer& /*renderer*/,
             ImGui::Text("%s", team_header);
             ImGui::PopStyleColor();
 
+            // Duplicate button: copies this team's selections to a new team slot
+            ImGui::SameLine();
+            ImGui::PushID(t * 100 + 99);
+            if (num_teams_ >= MAX_TEAMS) ImGui::BeginDisabled();
+            if (ImGui::SmallButton("+Dup") && num_teams_ < MAX_TEAMS) {
+                int dest = num_teams_;
+                squad_genome_idx_[dest] = squad_genome_idx_[t];
+                squad_variant_idx_[dest] = squad_variant_idx_[t];
+                fighter_genome_idx_[dest] = fighter_genome_idx_[t];
+                fighter_variant_idx_[dest] = fighter_variant_idx_[t];
+                snapshots_loaded_[dest] = false;
+                ++num_teams_;
+            }
+            if (num_teams_ >= MAX_TEAMS) ImGui::EndDisabled();
+            ImGui::PopID();
+
             ImGui::PushID(t);
 
             // Squad genome selector
