@@ -27,7 +27,6 @@
 #include <SDL.h>
 
 #include <algorithm>
-#include <chrono>
 #include <filesystem>
 #include <iostream>
 #include <memory>
