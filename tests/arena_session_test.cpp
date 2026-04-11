@@ -5,11 +5,11 @@ namespace nf = neuroflyer;
 
 TEST(ArenaSessionTest, Construction) {
     nf::ArenaConfig config;
-    config.num_teams = 2;
-    config.num_squads = 1;
-    config.fighters_per_squad = 5;
-    config.tower_count = 10;
-    config.token_count = 5;
+    config.world.num_teams = 2;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 5;
+    config.world.tower_count = 10;
+    config.world.token_count = 5;
     nf::ArenaSession arena(config, 42);
     EXPECT_EQ(arena.ships().size(), 10u);
     EXPECT_EQ(arena.towers().size(), 10u);
@@ -19,9 +19,9 @@ TEST(ArenaSessionTest, Construction) {
 
 TEST(ArenaSessionTest, TeamAssignment) {
     nf::ArenaConfig config;
-    config.num_teams = 4;
-    config.num_squads = 1;
-    config.fighters_per_squad = 3;
+    config.world.num_teams = 4;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 3;
     nf::ArenaSession arena(config, 42);
     EXPECT_EQ(arena.team_of(0), 0);
     EXPECT_EQ(arena.team_of(2), 0);
@@ -31,15 +31,15 @@ TEST(ArenaSessionTest, TeamAssignment) {
 
 TEST(ArenaSessionTest, SpawnInRing) {
     nf::ArenaConfig config;
-    config.world_width = 1000.0f;
-    config.world_height = 1000.0f;
-    config.num_teams = 4;
-    config.num_squads = 1;
-    config.fighters_per_squad = 5;
+    config.world.world_width = 1000.0f;
+    config.world.world_height = 1000.0f;
+    config.world.num_teams = 4;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 5;
     nf::ArenaSession arena(config, 42);
-    float center_x = config.world_width / 2.0f;
-    float center_y = config.world_height / 2.0f;
-    float radius = std::min(config.world_width, config.world_height) / 2.0f;
+    float center_x = config.world.world_width / 2.0f;
+    float center_y = config.world.world_height / 2.0f;
+    float radius = std::min(config.world.world_width, config.world.world_height) / 2.0f;
     float inner = radius / 3.0f;
     float outer = radius * 2.0f / 3.0f;
     for (const auto& ship : arena.ships()) {
@@ -53,14 +53,14 @@ TEST(ArenaSessionTest, SpawnInRing) {
 
 TEST(ArenaSessionTest, ShipsFaceCenter) {
     nf::ArenaConfig config;
-    config.world_width = 1000.0f;
-    config.world_height = 1000.0f;
-    config.num_teams = 2;
-    config.num_squads = 1;
-    config.fighters_per_squad = 1;
+    config.world.world_width = 1000.0f;
+    config.world.world_height = 1000.0f;
+    config.world.num_teams = 2;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 1;
     nf::ArenaSession arena(config, 42);
-    float cx = config.world_width / 2.0f;
-    float cy = config.world_height / 2.0f;
+    float cx = config.world.world_width / 2.0f;
+    float cy = config.world.world_height / 2.0f;
     for (const auto& ship : arena.ships()) {
         float to_center_x = cx - ship.x;
         float to_center_y = cy - ship.y;
@@ -73,11 +73,11 @@ TEST(ArenaSessionTest, ShipsFaceCenter) {
 
 TEST(ArenaSessionTest, TickAdvances) {
     nf::ArenaConfig config;
-    config.num_teams = 2;
-    config.num_squads = 1;
-    config.fighters_per_squad = 2;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.num_teams = 2;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 2;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.time_limit_ticks = 100;
     nf::ArenaSession arena(config, 42);
     arena.tick();
@@ -86,11 +86,11 @@ TEST(ArenaSessionTest, TickAdvances) {
 
 TEST(ArenaSessionTest, TimeLimitEndsRound) {
     nf::ArenaConfig config;
-    config.num_teams = 2;
-    config.num_squads = 1;
-    config.fighters_per_squad = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.num_teams = 2;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 1;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.time_limit_ticks = 5;
     nf::ArenaSession arena(config, 42);
     for (int i = 0; i < 5; ++i) arena.tick();
@@ -99,11 +99,11 @@ TEST(ArenaSessionTest, TimeLimitEndsRound) {
 
 TEST(ArenaSessionTest, SurvivalScoring) {
     nf::ArenaConfig config;
-    config.num_teams = 2;
-    config.num_squads = 1;
-    config.fighters_per_squad = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.num_teams = 2;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 1;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.time_limit_ticks = 100;
     nf::ArenaSession arena(config, 42);
     for (int i = 0; i < 60; ++i) arena.tick();
@@ -115,15 +115,15 @@ TEST(ArenaSessionTest, SurvivalScoring) {
 
 TEST(ArenaSessionTest, WrapNS) {
     nf::ArenaConfig config;
-    config.world_width = 100.0f;
-    config.world_height = 100.0f;
-    config.wrap_ns = true;
-    config.wrap_ew = false;
-    config.num_teams = 1;
-    config.num_squads = 1;
-    config.fighters_per_squad = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.world_width = 100.0f;
+    config.world.world_height = 100.0f;
+    config.world.wrap_ns = true;
+    config.world.wrap_ew = false;
+    config.world.num_teams = 1;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 1;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.time_limit_ticks = 1000;
     nf::ArenaSession arena(config, 42);
     arena.ships()[0].y = -1.0f;
@@ -133,15 +133,15 @@ TEST(ArenaSessionTest, WrapNS) {
 
 TEST(ArenaSessionTest, ClampEW) {
     nf::ArenaConfig config;
-    config.world_width = 100.0f;
-    config.world_height = 100.0f;
-    config.wrap_ns = false;
-    config.wrap_ew = false;
-    config.num_teams = 1;
-    config.num_squads = 1;
-    config.fighters_per_squad = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.world_width = 100.0f;
+    config.world.world_height = 100.0f;
+    config.world.wrap_ns = false;
+    config.world.wrap_ew = false;
+    config.world.num_teams = 1;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 1;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.time_limit_ticks = 1000;
     nf::ArenaSession arena(config, 42);
     arena.ships()[0].x = 110.0f;
@@ -151,14 +151,14 @@ TEST(ArenaSessionTest, ClampEW) {
 
 TEST(ArenaSessionTest, BulletShipCollisionSkipsSelf) {
     nf::ArenaConfig config;
-    config.num_teams = 2;
-    config.num_squads = 1;
-    config.fighters_per_squad = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.num_teams = 2;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 1;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.time_limit_ticks = 1000;
-    config.world_width = 1000.0f;
-    config.world_height = 1000.0f;
+    config.world.world_width = 1000.0f;
+    config.world.world_height = 1000.0f;
     nf::ArenaSession arena(config, 42);
     nf::Bullet b;
     b.x = arena.ships()[0].x;
@@ -176,14 +176,15 @@ TEST(ArenaSessionTest, BulletShipCollisionSkipsSelf) {
 
 TEST(ArenaSessionTest, BulletKillsEnemy) {
     nf::ArenaConfig config;
-    config.num_teams = 2;
-    config.num_squads = 1;
-    config.fighters_per_squad = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.num_teams = 2;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 1;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.time_limit_ticks = 1000;
-    config.world_width = 1000.0f;
-    config.world_height = 1000.0f;
+    config.world.world_width = 1000.0f;
+    config.world.world_height = 1000.0f;
+    config.world.ship_hp = 1.0f;
     nf::ArenaSession arena(config, 42);
     nf::Bullet b;
     b.x = arena.ships()[1].x;
@@ -201,14 +202,14 @@ TEST(ArenaSessionTest, BulletKillsEnemy) {
 
 TEST(ArenaSessionTest, LastTeamStandingEndsRound) {
     nf::ArenaConfig config;
-    config.num_teams = 2;
-    config.num_squads = 1;
-    config.fighters_per_squad = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.num_teams = 2;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 1;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.time_limit_ticks = 10000;
-    config.world_width = 1000.0f;
-    config.world_height = 1000.0f;
+    config.world.world_width = 1000.0f;
+    config.world.world_height = 1000.0f;
     nf::ArenaSession arena(config, 42);
     arena.ships()[1].alive = false;
     arena.tick();
@@ -217,14 +218,15 @@ TEST(ArenaSessionTest, LastTeamStandingEndsRound) {
 
 TEST(ArenaSessionTest, EnemyKillAwards1000Points) {
     nf::ArenaConfig config;
-    config.num_teams = 2;
-    config.num_squads = 1;
-    config.fighters_per_squad = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.num_teams = 2;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 1;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.time_limit_ticks = 1000;
-    config.world_width = 1000.0f;
-    config.world_height = 1000.0f;
+    config.world.world_width = 1000.0f;
+    config.world.world_height = 1000.0f;
+    config.world.ship_hp = 1.0f;
     nf::ArenaSession arena(config, 42);
 
     // Place bullet from ship 0 (team 0) on top of ship 1 (team 1)
@@ -252,15 +254,16 @@ TEST(ArenaSessionTest, EnemyKillAwards1000Points) {
 
 TEST(ArenaSessionTest, AllyKillRemoves1000Points) {
     nf::ArenaConfig config;
-    config.num_teams = 2;
-    config.num_squads = 1;
-    config.fighters_per_squad = 2;  // 2 ships per team
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.num_teams = 2;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 2;  // 2 ships per team
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.time_limit_ticks = 1000;
-    config.world_width = 1000.0f;
-    config.world_height = 1000.0f;
-    config.friendly_fire = true;  // must be on to allow ally kills
+    config.world.world_width = 1000.0f;
+    config.world.world_height = 1000.0f;
+    config.world.friendly_fire = true;  // must be on to allow ally kills
+    config.world.ship_hp = 1.0f;
     nf::ArenaSession arena(config, 42);
 
     // Ship 0 and 1 are on team 0. Place bullet from ship 0 on ship 1.
@@ -289,15 +292,15 @@ TEST(ArenaSessionTest, AllyKillRemoves1000Points) {
 
 TEST(ArenaSessionTest, BasesSpawnPerTeam) {
     nf::ArenaConfig config;
-    config.num_teams = 2;
-    config.num_squads = 1;
-    config.fighters_per_squad = 4;
-    config.tower_count = 0;
-    config.token_count = 0;
-    config.world_width = 1000.0f;
-    config.world_height = 1000.0f;
-    config.base_hp = 500.0f;
-    config.base_radius = 50.0f;
+    config.world.num_teams = 2;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 4;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
+    config.world.world_width = 1000.0f;
+    config.world.world_height = 1000.0f;
+    config.world.base_hp = 500.0f;
+    config.world.base_radius = 50.0f;
     nf::ArenaSession arena(config, 42);
 
     ASSERT_EQ(arena.bases().size(), 2u);
@@ -312,17 +315,25 @@ TEST(ArenaSessionTest, BasesSpawnPerTeam) {
 
 TEST(ArenaSessionTest, BulletDamagesEnemyBase) {
     nf::ArenaConfig config;
-    config.num_teams = 2;
-    config.num_squads = 1;
-    config.fighters_per_squad = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
-    config.world_width = 1000.0f;
-    config.world_height = 1000.0f;
-    config.base_hp = 100.0f;
-    config.base_radius = 50.0f;
-    config.base_bullet_damage = 10.0f;
+    config.world.num_teams = 2;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 1;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
+    config.world.world_width = 1000.0f;
+    config.world.world_height = 1000.0f;
+    config.world.base_hp = 100.0f;
+    config.world.base_radius = 50.0f;
+    config.world.base_bullet_damage = 10.0f;
     nf::ArenaSession arena(config, 42);
+
+    // Move all ships far away so they don't intercept the bullet
+    for (auto& ship : arena.ships()) {
+        ship.x = 0.0f;
+        ship.y = 0.0f;
+        ship.dx = 0.0f;
+        ship.dy = 0.0f;
+    }
 
     nf::Bullet b;
     b.x = arena.bases()[1].x;
@@ -342,16 +353,16 @@ TEST(ArenaSessionTest, BulletDamagesEnemyBase) {
 
 TEST(ArenaSessionTest, BulletDoesNotDamageOwnBase) {
     nf::ArenaConfig config;
-    config.num_teams = 2;
-    config.num_squads = 1;
-    config.fighters_per_squad = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
-    config.world_width = 1000.0f;
-    config.world_height = 1000.0f;
-    config.base_hp = 100.0f;
-    config.base_radius = 50.0f;
-    config.base_bullet_damage = 10.0f;
+    config.world.num_teams = 2;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 1;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
+    config.world.world_width = 1000.0f;
+    config.world.world_height = 1000.0f;
+    config.world.base_hp = 100.0f;
+    config.world.base_radius = 50.0f;
+    config.world.base_bullet_damage = 10.0f;
     nf::ArenaSession arena(config, 42);
 
     nf::Bullet b;
@@ -371,16 +382,16 @@ TEST(ArenaSessionTest, BulletDoesNotDamageOwnBase) {
 
 TEST(ArenaSessionTest, BaseDestroyedEndsRound) {
     nf::ArenaConfig config;
-    config.num_teams = 2;
-    config.num_squads = 1;
-    config.fighters_per_squad = 1;
-    config.tower_count = 0;
-    config.token_count = 0;
-    config.world_width = 1000.0f;
-    config.world_height = 1000.0f;
-    config.base_hp = 10.0f;
-    config.base_radius = 50.0f;
-    config.base_bullet_damage = 10.0f;
+    config.world.num_teams = 2;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 1;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
+    config.world.world_width = 1000.0f;
+    config.world.world_height = 1000.0f;
+    config.world.base_hp = 10.0f;
+    config.world.base_radius = 50.0f;
+    config.world.base_bullet_damage = 10.0f;
     config.time_limit_ticks = 10000;
     nf::ArenaSession arena(config, 42);
 
@@ -392,21 +403,21 @@ TEST(ArenaSessionTest, BaseDestroyedEndsRound) {
 
 TEST(ArenaConfigTest, PopulationFromSquads) {
     nf::ArenaConfig config;
-    config.num_teams = 2;
-    config.num_squads = 2;
-    config.fighters_per_squad = 4;
+    config.world.num_teams = 2;
+    config.world.num_squads = 2;
+    config.world.fighters_per_squad = 4;
     EXPECT_EQ(config.population_size(), 16u);
 }
 
 TEST(ArenaSessionTest, SquadAssignment) {
     nf::ArenaConfig config;
-    config.num_teams = 2;
-    config.num_squads = 2;
-    config.fighters_per_squad = 3;
-    config.tower_count = 0;
-    config.token_count = 0;
-    config.world_width = 1000.0f;
-    config.world_height = 1000.0f;
+    config.world.num_teams = 2;
+    config.world.num_squads = 2;
+    config.world.fighters_per_squad = 3;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
+    config.world.world_width = 1000.0f;
+    config.world.world_height = 1000.0f;
     nf::ArenaSession arena(config, 42);
 
     EXPECT_EQ(arena.ships().size(), 12u);
@@ -420,14 +431,14 @@ TEST(ArenaSessionTest, SquadAssignment) {
 
 TEST(ArenaSessionTest, SquadStats) {
     nf::ArenaConfig config;
-    config.num_teams = 2;
-    config.num_squads = 1;
-    config.fighters_per_squad = 4;
-    config.tower_count = 0;
-    config.token_count = 0;
-    config.world_width = 1000.0f;
-    config.world_height = 1000.0f;
-    config.base_hp = 100.0f;
+    config.world.num_teams = 2;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 4;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
+    config.world.world_width = 1000.0f;
+    config.world.world_height = 1000.0f;
+    config.world.base_hp = 100.0f;
     nf::ArenaSession arena(config, 42);
 
     auto stats = arena.compute_squad_stats(0, 0);
@@ -444,12 +455,12 @@ TEST(ArenaSessionTest, SquadStats) {
 
 TEST(ArenaSession, SquadStatsIncludesSpacing) {
     nf::ArenaConfig cfg;
-    cfg.num_teams = 1;
-    cfg.num_squads = 1;
-    cfg.fighters_per_squad = 4;
-    cfg.tower_count = 0;
-    cfg.token_count = 0;
-    cfg.base_hp = 1000.0f;
+    cfg.world.num_teams = 1;
+    cfg.world.num_squads = 1;
+    cfg.world.fighters_per_squad = 4;
+    cfg.world.tower_count = 0;
+    cfg.world.token_count = 0;
+    cfg.world.base_hp = 1000.0f;
 
     nf::ArenaSession arena(cfg, 42);
 
@@ -462,15 +473,15 @@ TEST(ArenaSession, SquadStatsIncludesSpacing) {
 
 TEST(ArenaSessionTest, FriendlyFireOffBulletsPassThroughTeammates) {
     nf::ArenaConfig config;
-    config.num_teams = 2;
-    config.num_squads = 1;
-    config.fighters_per_squad = 2;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.num_teams = 2;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 2;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.time_limit_ticks = 1000;
-    config.world_width = 1000.0f;
-    config.world_height = 1000.0f;
-    config.friendly_fire = false;  // bullets should pass through teammates
+    config.world.world_width = 1000.0f;
+    config.world.world_height = 1000.0f;
+    config.world.friendly_fire = false;  // bullets should pass through teammates
     nf::ArenaSession arena(config, 42);
 
     // Ship 0 and 1 are on team 0.
@@ -499,15 +510,16 @@ TEST(ArenaSessionTest, FriendlyFireOffBulletsPassThroughTeammates) {
 
 TEST(ArenaSessionTest, FriendlyFireOnBulletsKillTeammates) {
     nf::ArenaConfig config;
-    config.num_teams = 2;
-    config.num_squads = 1;
-    config.fighters_per_squad = 2;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.num_teams = 2;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 2;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.time_limit_ticks = 1000;
-    config.world_width = 1000.0f;
-    config.world_height = 1000.0f;
-    config.friendly_fire = true;  // bullets SHOULD kill teammates
+    config.world.world_width = 1000.0f;
+    config.world.world_height = 1000.0f;
+    config.world.friendly_fire = true;  // bullets SHOULD kill teammates
+    config.world.ship_hp = 1.0f;
     nf::ArenaSession arena(config, 42);
 
     ASSERT_EQ(arena.team_of(0), 0);
@@ -532,15 +544,16 @@ TEST(ArenaSessionTest, FriendlyFireOnBulletsKillTeammates) {
 
 TEST(ArenaSessionTest, FriendlyFireOffEnemyBulletsStillKill) {
     nf::ArenaConfig config;
-    config.num_teams = 2;
-    config.num_squads = 1;
-    config.fighters_per_squad = 2;
-    config.tower_count = 0;
-    config.token_count = 0;
+    config.world.num_teams = 2;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 2;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
     config.time_limit_ticks = 1000;
-    config.world_width = 1000.0f;
-    config.world_height = 1000.0f;
-    config.friendly_fire = false;
+    config.world.world_width = 1000.0f;
+    config.world.world_height = 1000.0f;
+    config.world.friendly_fire = false;
+    config.world.ship_hp = 1.0f;
     nf::ArenaSession arena(config, 42);
 
     // Ship 0 is team 0, ship 2 is team 1.
@@ -563,4 +576,103 @@ TEST(ArenaSessionTest, FriendlyFireOffEnemyBulletsStillKill) {
     // Enemy ship should be dead — cross-team kills still work.
     EXPECT_FALSE(arena.ships()[2].alive);
     EXPECT_EQ(arena.enemy_kills()[0], 1);
+}
+
+TEST(ArenaSessionTest, ShipSurvivesBulletWithHP) {
+    nf::ArenaConfig config;
+    config.world.num_teams = 2;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 1;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
+    config.time_limit_ticks = 1000;
+    config.world.world_width = 1000.0f;
+    config.world.world_height = 1000.0f;
+    config.world.ship_hp = 3.0f;
+    config.world.bullet_ship_damage = 1.0f;
+    nf::ArenaSession arena(config, 42);
+
+    // One bullet should damage but not kill
+    nf::Bullet b;
+    b.x = arena.ships()[1].x;
+    b.y = arena.ships()[1].y;
+    b.alive = true;
+    b.dir_x = 0.0f;
+    b.dir_y = -1.0f;
+    b.owner_index = 0;
+    b.distance_traveled = 0.0f;
+    b.max_range = 500.0f;
+    arena.add_bullet(b);
+    arena.resolve_bullet_ship_collisions();
+
+    EXPECT_TRUE(arena.ships()[1].alive);
+    EXPECT_FLOAT_EQ(arena.ships()[1].hp, 2.0f);
+    EXPECT_EQ(arena.enemy_kills()[0], 0);  // no kill yet
+}
+
+TEST(ArenaSessionTest, ShipDiesAfterEnoughBullets) {
+    nf::ArenaConfig config;
+    config.world.num_teams = 2;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 1;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
+    config.time_limit_ticks = 1000;
+    config.world.world_width = 1000.0f;
+    config.world.world_height = 1000.0f;
+    config.world.ship_hp = 3.0f;
+    config.world.bullet_ship_damage = 1.0f;
+    nf::ArenaSession arena(config, 42);
+
+    // Fire 3 bullets, each doing 1 damage
+    for (int hit = 0; hit < 3; ++hit) {
+        nf::Bullet b;
+        b.x = arena.ships()[1].x;
+        b.y = arena.ships()[1].y;
+        b.alive = true;
+        b.dir_x = 0.0f;
+        b.dir_y = -1.0f;
+        b.owner_index = 0;
+        b.distance_traveled = 0.0f;
+        b.max_range = 500.0f;
+        arena.add_bullet(b);
+        arena.resolve_bullet_ship_collisions();
+    }
+
+    EXPECT_FALSE(arena.ships()[1].alive);
+    EXPECT_FLOAT_EQ(arena.ships()[1].hp, 0.0f);
+    EXPECT_EQ(arena.enemy_kills()[0], 1);
+}
+
+TEST(ArenaSessionTest, DamageLevel) {
+    nf::Triangle ship(100.0f, 100.0f);
+    ship.hp = 3.0f;
+    ship.max_hp = 3.0f;
+
+    EXPECT_EQ(ship.damage_level(), 0);  // pristine
+
+    ship.take_damage(1.0f);
+    EXPECT_EQ(ship.damage_level(), 1);  // cracked
+    EXPECT_TRUE(ship.alive);
+
+    ship.take_damage(1.0f);
+    EXPECT_EQ(ship.damage_level(), 2);  // on fire
+    EXPECT_TRUE(ship.alive);
+
+    ship.take_damage(1.0f);
+    EXPECT_FALSE(ship.alive);           // dead
+}
+
+TEST(ArenaSessionTest, ShipHPInitFromConfig) {
+    nf::ArenaConfig config;
+    config.world.num_teams = 1;
+    config.world.num_squads = 1;
+    config.world.fighters_per_squad = 1;
+    config.world.tower_count = 0;
+    config.world.token_count = 0;
+    config.world.ship_hp = 5.0f;
+    nf::ArenaSession arena(config, 42);
+
+    EXPECT_FLOAT_EQ(arena.ships()[0].hp, 5.0f);
+    EXPECT_FLOAT_EQ(arena.ships()[0].max_hp, 5.0f);
 }

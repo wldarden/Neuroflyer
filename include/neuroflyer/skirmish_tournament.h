@@ -28,7 +28,11 @@ public:
                        const std::vector<TeamIndividual>& variants,
                        uint32_t seed);
 
-    bool step();  // returns true when tournament is complete
+    bool step();  // advance featured match one tick; returns true when tournament complete
+
+    /// Run background seeds within time budget (milliseconds).
+    /// Call after step() each frame to fill remaining frame time.
+    void run_background_work(int budget_ms);
 
     [[nodiscard]] std::size_t current_round() const noexcept;
     [[nodiscard]] std::size_t current_match() const noexcept;
@@ -43,11 +47,28 @@ public:
     [[nodiscard]] std::pair<std::size_t, std::size_t> current_matchup() const noexcept;
     [[nodiscard]] const std::vector<int>& current_ship_teams() const noexcept;
 
+    [[nodiscard]] neuralnet::Network* fighter_net(std::size_t team) noexcept;
+    [[nodiscard]] neuralnet::Network* leader_net(std::size_t team) noexcept;
+
+    /// Per-ship squad leader fighter inputs from last tick (for visualization).
+    [[nodiscard]] const std::vector<SquadLeaderFighterInputs>& last_squad_inputs() const noexcept;
+
+    /// Per-team squad leader net input values from last tick (14 floats).
+    [[nodiscard]] const std::vector<float>& last_leader_input(std::size_t team) const noexcept;
+
+    /// Per-ship fighter net input values from last tick.
+    [[nodiscard]] const std::vector<float>& last_fighter_input(std::size_t ship) const noexcept;
+
 private:
     void build_rounds();
     void start_match();
     void finish_match();
     void run_tick();
+
+    // Background match lifecycle (tick-level granularity)
+    void start_bg_match();
+    void finish_bg_match();
+    void drain_background();
 
     SkirmishConfig config_;
     ShipDesign fighter_design_;
@@ -68,10 +89,26 @@ private:
     std::vector<neuralnet::Network> fighter_nets_;
     std::vector<std::vector<float>> recurrent_states_;
     std::vector<int> ship_teams_;
+    std::vector<SquadLeaderFighterInputs> last_sl_inputs_;  // per ship, updated each tick
+    std::vector<std::vector<float>> last_leader_inputs_;   // per team (2), 14 floats each
+    std::vector<std::vector<float>> last_fighter_inputs_;   // per ship, full input vector
+
+    // Background match state (tick-level granularity)
+    bool bg_match_active_ = false;
+    std::unique_ptr<ArenaSession> bg_arena_;
+    ArenaConfig bg_arena_config_;
+    std::vector<neuralnet::Network> bg_ntm_nets_;
+    std::vector<neuralnet::Network> bg_leader_nets_;
+    std::vector<neuralnet::Network> bg_fighter_nets_;
+    std::vector<std::vector<float>> bg_recurrent_states_;
+    std::vector<int> bg_ship_teams_;
 
     std::mt19937 rng_;
     bool complete_ = false;
     bool match_in_progress_ = false;
+    bool background_matches_done_ = false;
+    std::size_t bg_match_cursor_ = 1;  // next background matchup (0 = featured, skip)
+    std::size_t bg_seed_cursor_ = 0;   // next seed within current background matchup
 };
 
 } // namespace neuroflyer

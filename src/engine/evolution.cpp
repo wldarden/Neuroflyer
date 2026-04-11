@@ -409,8 +409,41 @@ void rebuild_weight_genes(Individual& ind, std::mt19937& rng) {
 
         if (ind.genome.has_gene(wtag)) {
             auto& wvals = ind.genome.gene(wtag).values;
-            while (wvals.size() < needed_w) wvals.push_back(dist(rng));
-            wvals.resize(needed_w);
+            std::size_t old_total = wvals.size();
+
+            if (old_total != needed_w && old_total > 0 && layer.output_size > 0) {
+                // Determine whether the input count (columns) or output count
+                // (rows) changed.  add_node/remove_node only modifies one
+                // layer's output_size, so for any given layer in this loop
+                // exactly one dimension changed.
+                //
+                // If old_total is evenly divisible by layer.output_size, the
+                // output count for THIS layer didn't change — the previous
+                // layer's output (our column count) changed instead.  We must
+                // re-layout the weight matrix row-by-row so every output neuron
+                // gets a proper connection to the added/removed input.
+                if (old_total % layer.output_size == 0) {
+                    std::size_t old_cols = old_total / layer.output_size;
+                    std::size_t new_cols = prev;
+                    std::vector<float> new_wvals(needed_w);
+                    for (std::size_t row = 0; row < layer.output_size; ++row) {
+                        for (std::size_t col = 0; col < new_cols; ++col) {
+                            if (col < old_cols) {
+                                new_wvals[row * new_cols + col] =
+                                    wvals[row * old_cols + col];
+                            } else {
+                                new_wvals[row * new_cols + col] = dist(rng);
+                            }
+                        }
+                    }
+                    wvals = std::move(new_wvals);
+                } else {
+                    // Output count changed (rows added/removed at end) — the
+                    // column count is the same, so flat append/truncate works.
+                    while (wvals.size() < needed_w) wvals.push_back(dist(rng));
+                    wvals.resize(needed_w);
+                }
+            }
         } else {
             std::vector<float> wvals(needed_w);
             for (auto& v : wvals) v = dist(rng);

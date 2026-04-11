@@ -62,6 +62,72 @@ void draw_rotated_triangle(SDL_Renderer* renderer,
     SDL_RenderDrawLineF(renderer, x2, y2, x0, y0);
 }
 
+/// Draw damage effects on a ship based on damage_level.
+/// Level 0: pristine (nothing). Level 1: gold cracks. Level 2: cracks + flames.
+void draw_damage_effects(SDL_Renderer* renderer,
+                         float cx, float cy, float size,
+                         float rotation, int damage_level) {
+    if (damage_level <= 0) return;
+
+    float cos_r = std::cos(rotation);
+    float sin_r = std::sin(rotation);
+    auto rotate = [&](float lx, float ly, float& ox, float& oy) {
+        ox = cx + lx * cos_r - ly * sin_r;
+        oy = cy + lx * sin_r + ly * cos_r;
+    };
+
+    // Level 1+: gold crack lines across the hull
+    SDL_SetRenderDrawColor(renderer, 255, 200, 50, 200);  // gold/amber
+
+    // Crack 1: diagonal from upper-left to center-right
+    float ax, ay, bx, by;
+    rotate(-size * 0.4f, -size * 0.3f, ax, ay);
+    rotate(size * 0.3f, size * 0.2f, bx, by);
+    SDL_RenderDrawLineF(renderer, ax, ay, bx, by);
+
+    // Crack 2: jagged from upper-right toward lower-left
+    float mx, my;
+    rotate(size * 0.3f, -size * 0.5f, ax, ay);
+    rotate(0.0f, 0.0f, mx, my);
+    SDL_RenderDrawLineF(renderer, ax, ay, mx, my);
+    rotate(-size * 0.5f, size * 0.4f, bx, by);
+    SDL_RenderDrawLineF(renderer, mx, my, bx, by);
+
+    // Crack 3: short spur near nose
+    rotate(-size * 0.15f, -size * 0.6f, ax, ay);
+    rotate(size * 0.2f, -size * 0.1f, bx, by);
+    SDL_RenderDrawLineF(renderer, ax, ay, bx, by);
+
+    if (damage_level >= 2) {
+        // Level 2: flames out the back — orange/red streaks behind ship
+        // "Back" in local coords is (0, +size) direction
+        float flame_len = size * 1.2f;
+
+        // Main flame (orange)
+        SDL_SetRenderDrawColor(renderer, 255, 140, 30, 180);
+        rotate(0.0f, size * 0.6f, ax, ay);
+        rotate(0.0f, size * 0.6f + flame_len, bx, by);
+        SDL_RenderDrawLineF(renderer, ax, ay, bx, by);
+
+        // Left flame tongue (red-orange)
+        SDL_SetRenderDrawColor(renderer, 255, 80, 20, 160);
+        rotate(-size * 0.3f, size * 0.5f, ax, ay);
+        rotate(-size * 0.15f, size * 0.5f + flame_len * 0.7f, bx, by);
+        SDL_RenderDrawLineF(renderer, ax, ay, bx, by);
+
+        // Right flame tongue
+        rotate(size * 0.3f, size * 0.5f, ax, ay);
+        rotate(size * 0.15f, size * 0.5f + flame_len * 0.7f, bx, by);
+        SDL_RenderDrawLineF(renderer, ax, ay, bx, by);
+
+        // Inner bright flame (yellow core)
+        SDL_SetRenderDrawColor(renderer, 255, 230, 80, 200);
+        rotate(0.0f, size * 0.7f, ax, ay);
+        rotate(0.0f, size * 0.7f + flame_len * 0.5f, bx, by);
+        SDL_RenderDrawLineF(renderer, ax, ay, bx, by);
+    }
+}
+
 /// Draw a filled circle (approximated with radial lines).
 void draw_filled_circle(SDL_Renderer* renderer,
                         float cx, float cy, float radius,
@@ -300,6 +366,9 @@ void ArenaGameView::render_ships(const std::vector<Triangle>& ships,
         draw_rotated_triangle(renderer_, screen_x, screen_y,
                               ship_screen_size, ships[i].rotation,
                               color.r, color.g, color.b, alpha);
+        draw_damage_effects(renderer_, screen_x, screen_y,
+                            ship_screen_size, ships[i].rotation,
+                            ships[i].damage_level());
     }
 }
 

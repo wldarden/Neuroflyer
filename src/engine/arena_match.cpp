@@ -1,4 +1,5 @@
 #include <neuroflyer/arena_match.h>
+#include <neuroflyer/entity_grid.h>
 #include <neuroflyer/sector_grid.h>
 #include <neuroflyer/sensor_engine.h>
 #include <neuroflyer/squad_leader.h>
@@ -15,10 +16,10 @@ ArenaMatchResult run_arena_match(
     const std::vector<TeamIndividual>& teams,
     uint32_t seed) {
 
-    assert(teams.size() == arena_config.num_teams);
+    assert(teams.size() == arena_config.world.num_teams);
 
     ArenaMatchResult result;
-    result.team_scores.resize(arena_config.num_teams, 0.0f);
+    result.team_scores.resize(arena_config.world.num_teams, 0.0f);
 
     // (a) Create arena session
     ArenaSession arena(arena_config, seed);
@@ -27,11 +28,11 @@ ArenaMatchResult run_arena_match(
     std::vector<neuralnet::Network> ntm_nets;
     std::vector<neuralnet::Network> leader_nets;
     std::vector<neuralnet::Network> fighter_nets;
-    ntm_nets.reserve(arena_config.num_teams);
-    leader_nets.reserve(arena_config.num_teams);
-    fighter_nets.reserve(arena_config.num_teams);
+    ntm_nets.reserve(arena_config.world.num_teams);
+    leader_nets.reserve(arena_config.world.num_teams);
+    fighter_nets.reserve(arena_config.world.num_teams);
 
-    for (std::size_t t = 0; t < arena_config.num_teams; ++t) {
+    for (std::size_t t = 0; t < arena_config.world.num_teams; ++t) {
         ntm_nets.push_back(teams[t].build_ntm_network());
         leader_nets.push_back(teams[t].build_squad_network());
         fighter_nets.push_back(teams[t].build_fighter_network());
@@ -51,7 +52,7 @@ ArenaMatchResult run_arena_match(
     // (e) Main loop
     while (!arena.is_over()) {
         // Build sector grid for this tick
-        SectorGrid grid(arena_config.world_width, arena_config.world_height,
+        SectorGrid grid(arena_config.world.world_width, arena_config.world.world_height,
                         arena_config.sector_size);
         // Insert alive ships (IDs 0..total_ships-1)
         for (std::size_t i = 0; i < total_ships; ++i) {
@@ -67,11 +68,11 @@ ArenaMatchResult run_arena_match(
         }
 
         // Per team: run NTM + squad leader -> SquadLeaderOrder
-        std::vector<SquadLeaderOrder> team_orders(arena_config.num_teams);
-        std::vector<float> squad_center_xs(arena_config.num_teams, 0.0f);
-        std::vector<float> squad_center_ys(arena_config.num_teams, 0.0f);
+        std::vector<SquadLeaderOrder> team_orders(arena_config.world.num_teams);
+        std::vector<float> squad_center_xs(arena_config.world.num_teams, 0.0f);
+        std::vector<float> squad_center_ys(arena_config.world.num_teams, 0.0f);
 
-        for (std::size_t t = 0; t < arena_config.num_teams; ++t) {
+        for (std::size_t t = 0; t < arena_config.world.num_teams; ++t) {
             int team = static_cast<int>(t);
             auto stats = arena.compute_squad_stats(team, 0);
             squad_center_xs[t] = stats.centroid_x;
@@ -85,7 +86,7 @@ ArenaMatchResult run_arena_match(
             auto ntm = run_ntm_threat_selection(
                 ntm_nets[t], stats.centroid_x, stats.centroid_y,
                 stats.alive_fraction, threats,
-                arena_config.world_width, arena_config.world_height);
+                arena_config.world.world_width, arena_config.world.world_height);
 
             // Find bases
             float own_base_x = arena.bases()[t].x, own_base_y = arena.bases()[t].y;
@@ -100,8 +101,8 @@ ArenaMatchResult run_arena_match(
             }
 
             // Compute squad leader inputs
-            float world_diag = std::sqrt(arena_config.world_width * arena_config.world_width +
-                                          arena_config.world_height * arena_config.world_height);
+            float world_diag = std::sqrt(arena_config.world.world_width * arena_config.world.world_width +
+                                          arena_config.world.world_height * arena_config.world.world_height);
             float home_dx = own_base_x - stats.centroid_x, home_dy = own_base_y - stats.centroid_y;
             float home_dist_raw = std::sqrt(home_dx * home_dx + home_dy * home_dy);
             float home_distance = home_dist_raw / world_diag;
@@ -113,13 +114,35 @@ ArenaMatchResult run_arena_match(
             float cmd_heading_cos = (cmd_dist_raw > 1e-6f) ? cmd_dy / cmd_dist_raw : 0.0f;
             float cmd_target_distance = cmd_dist_raw / world_diag;
 
+            // Compute enemy alive fraction
+            float enemy_alive_frac = 0.0f;
+            std::size_t enemy_total = 0, enemy_alive = 0;
+            for (std::size_t si = 0; si < total_ships; ++si) {
+                if (ship_teams[si] != team) {
+                    ++enemy_total;
+                    if (arena.ships()[si].alive) ++enemy_alive;
+                }
+            }
+            if (enemy_total > 0) enemy_alive_frac = static_cast<float>(enemy_alive) / static_cast<float>(enemy_total);
+
+            float time_remaining = 1.0f - static_cast<float>(arena.current_tick()) /
+                static_cast<float>(std::max(arena_config.time_limit_ticks, 1u));
+
             team_orders[t] = run_squad_leader(
                 leader_nets[t], stats.alive_fraction,
                 home_heading_sin, home_heading_cos, home_distance,
-                own_base_hp, stats.squad_spacing,
+                own_base_hp,
                 cmd_heading_sin, cmd_heading_cos, cmd_target_distance,
-                ntm, own_base_x, own_base_y, enemy_base_x, enemy_base_y);
+                ntm, own_base_x, own_base_y, enemy_base_x, enemy_base_y,
+                enemy_alive_frac, time_remaining,
+                stats.centroid_x / arena_config.world.world_width,
+                stats.centroid_y / arena_config.world.world_height);
         }
+
+        // Build sensor grid for this tick
+        auto sensor_grid = build_sensor_grid(fighter_design,
+            arena_config.world.world_width, arena_config.world.world_height,
+            arena.ships(), arena.towers(), arena.tokens(), arena.bullets());
 
         // For each alive ship: build input, run fighter net, decode output, set actions
         for (std::size_t i = 0; i < total_ships; ++i) {
@@ -134,14 +157,15 @@ ArenaMatchResult run_arena_match(
                 arena.ships()[i].rotation,
                 team_orders[t],
                 squad_center_xs[t], squad_center_ys[t],
-                arena_config.world_width, arena_config.world_height);
+                arena_config.world.world_width, arena_config.world.world_height);
 
             // Build ArenaQueryContext
             auto ctx = ArenaQueryContext::for_ship(
                 arena.ships()[i], i, team,
-                arena_config.world_width, arena_config.world_height,
+                arena_config.world.world_width, arena_config.world.world_height,
                 arena.towers(), arena.tokens(),
                 arena.ships(), ship_teams, arena.bullets());
+            ctx.grid = &sensor_grid;
 
             // Build fighter input
             auto input = build_arena_ship_input(
@@ -176,7 +200,7 @@ ArenaMatchResult run_arena_match(
     result.match_completed = true;
 
     // (f) Compute team fitness scores
-    auto num_teams = arena_config.num_teams;
+    auto num_teams = arena_config.world.num_teams;
 
     for (std::size_t t = 0; t < num_teams; ++t) {
         int team = static_cast<int>(t);
@@ -195,7 +219,7 @@ ArenaMatchResult run_arena_match(
         float own_survival = arena.bases()[t].hp_normalized();
 
         // Alive fraction: alive ships on team / total ships on team
-        std::size_t ships_per_team = arena_config.num_squads * arena_config.fighters_per_squad;
+        std::size_t ships_per_team = arena_config.world.num_squads * arena_config.world.fighters_per_squad;
         std::size_t alive_on_team = 0;
         for (std::size_t i = 0; i < total_ships; ++i) {
             if (ship_teams[i] == team && arena.ships()[i].alive) {
@@ -208,7 +232,7 @@ ArenaMatchResult run_arena_match(
 
         // Token fraction: tokens collected by team / total token count
         float token_frac = 0.0f;
-        if (arena_config.token_count > 0) {
+        if (arena_config.world.token_count > 0) {
             int team_tokens = 0;
             const auto& tc = arena.tokens_collected();
             for (std::size_t i = 0; i < total_ships; ++i) {
@@ -217,7 +241,7 @@ ArenaMatchResult run_arena_match(
                 }
             }
             token_frac = static_cast<float>(team_tokens) /
-                         static_cast<float>(arena_config.token_count);
+                         static_cast<float>(arena_config.world.token_count);
         }
 
         // Weighted score

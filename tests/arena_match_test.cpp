@@ -8,14 +8,14 @@ TEST(ArenaMatchTest, RunsWithoutCrash) {
     std::mt19937 rng(42);
 
     nf::ArenaConfig arena_config;
-    arena_config.num_teams = 2;
-    arena_config.num_squads = 1;
-    arena_config.fighters_per_squad = 4;
-    arena_config.tower_count = 5;
-    arena_config.token_count = 3;
-    arena_config.world_width = 1000.0f;
-    arena_config.world_height = 1000.0f;
-    arena_config.base_hp = 100.0f;
+    arena_config.world.num_teams = 2;
+    arena_config.world.num_squads = 1;
+    arena_config.world.fighters_per_squad = 4;
+    arena_config.world.tower_count = 5;
+    arena_config.world.token_count = 3;
+    arena_config.world.world_width = 1000.0f;
+    arena_config.world.world_height = 1000.0f;
+    arena_config.world.base_hp = 100.0f;
     arena_config.time_limit_ticks = 60;
 
     nf::ShipDesign design;
@@ -44,14 +44,14 @@ TEST(ArenaMatchTest, ScoresAreNonNegative) {
     std::mt19937 rng(42);
 
     nf::ArenaConfig arena_config;
-    arena_config.num_teams = 2;
-    arena_config.num_squads = 1;
-    arena_config.fighters_per_squad = 4;
-    arena_config.tower_count = 0;
-    arena_config.token_count = 0;
-    arena_config.world_width = 1000.0f;
-    arena_config.world_height = 1000.0f;
-    arena_config.base_hp = 100.0f;
+    arena_config.world.num_teams = 2;
+    arena_config.world.num_squads = 1;
+    arena_config.world.fighters_per_squad = 4;
+    arena_config.world.tower_count = 0;
+    arena_config.world.token_count = 0;
+    arena_config.world.world_width = 1000.0f;
+    arena_config.world.world_height = 1000.0f;
+    arena_config.world.base_hp = 100.0f;
     arena_config.time_limit_ticks = 30;
 
     nf::ShipDesign design;
@@ -76,14 +76,14 @@ TEST(ArenaMatchTest, FullGenerationCycle) {
     std::mt19937 rng(42);
 
     nf::ArenaConfig arena_config;
-    arena_config.num_teams = 2;
-    arena_config.num_squads = 1;
-    arena_config.fighters_per_squad = 4;
-    arena_config.tower_count = 0;
-    arena_config.token_count = 0;
-    arena_config.world_width = 500.0f;
-    arena_config.world_height = 500.0f;
-    arena_config.base_hp = 50.0f;
+    arena_config.world.num_teams = 2;
+    arena_config.world.num_squads = 1;
+    arena_config.world.fighters_per_squad = 4;
+    arena_config.world.tower_count = 0;
+    arena_config.world.token_count = 0;
+    arena_config.world.world_width = 500.0f;
+    arena_config.world.world_height = 500.0f;
+    arena_config.world.base_hp = 50.0f;
     arena_config.time_limit_ticks = 30;
 
     nf::ShipDesign design;

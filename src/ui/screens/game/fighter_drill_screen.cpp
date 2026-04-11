@@ -4,6 +4,7 @@
 
 #include <neuroflyer/app_state.h>
 #include <neuroflyer/arena_sensor.h>
+#include <neuroflyer/arena_tick.h>
 #include <neuroflyer/renderer.h>
 #include <neuroflyer/sensor_engine.h>
 #include <neuroflyer/snapshot_io.h>
@@ -46,6 +47,49 @@ void draw_rotated_triangle(SDL_Renderer* renderer,
     SDL_RenderDrawLineF(renderer, x0, y0, x1, y1);
     SDL_RenderDrawLineF(renderer, x1, y1, x2, y2);
     SDL_RenderDrawLineF(renderer, x2, y2, x0, y0);
+}
+
+void draw_damage_effects(SDL_Renderer* renderer,
+                         float cx, float cy, float size,
+                         float rotation, int damage_level) {
+    if (damage_level <= 0) return;
+    float cos_r = std::cos(rotation);
+    float sin_r = std::sin(rotation);
+    auto rotate = [&](float lx, float ly, float& ox, float& oy) {
+        ox = cx + lx * cos_r - ly * sin_r;
+        oy = cy + lx * sin_r + ly * cos_r;
+    };
+    SDL_SetRenderDrawColor(renderer, 255, 200, 50, 200);
+    float ax, ay, bx, by, mx, my;
+    rotate(-size * 0.4f, -size * 0.3f, ax, ay);
+    rotate(size * 0.3f, size * 0.2f, bx, by);
+    SDL_RenderDrawLineF(renderer, ax, ay, bx, by);
+    rotate(size * 0.3f, -size * 0.5f, ax, ay);
+    rotate(0.0f, 0.0f, mx, my);
+    SDL_RenderDrawLineF(renderer, ax, ay, mx, my);
+    rotate(-size * 0.5f, size * 0.4f, bx, by);
+    SDL_RenderDrawLineF(renderer, mx, my, bx, by);
+    rotate(-size * 0.15f, -size * 0.6f, ax, ay);
+    rotate(size * 0.2f, -size * 0.1f, bx, by);
+    SDL_RenderDrawLineF(renderer, ax, ay, bx, by);
+    if (damage_level >= 2) {
+        float flame_len = size * 1.2f;
+        SDL_SetRenderDrawColor(renderer, 255, 140, 30, 180);
+        rotate(0.0f, size * 0.6f, ax, ay);
+        rotate(0.0f, size * 0.6f + flame_len, bx, by);
+        SDL_RenderDrawLineF(renderer, ax, ay, bx, by);
+        SDL_SetRenderDrawColor(renderer, 255, 80, 20, 160);
+        rotate(-size * 0.3f, size * 0.5f, ax, ay);
+        rotate(-size * 0.15f, size * 0.5f + flame_len * 0.7f, bx, by);
+        SDL_RenderDrawLineF(renderer, ax, ay, bx, by);
+        rotate(size * 0.3f, size * 0.5f, ax, ay);
+        rotate(size * 0.15f, size * 0.5f + flame_len * 0.7f, bx, by);
+        SDL_RenderDrawLineF(renderer, ax, ay, bx, by);
+        SDL_SetRenderDrawColor(renderer, 255, 230, 80, 200);
+        rotate(0.0f, size * 0.7f, ax, ay);
+        rotate(0.0f, size * 0.7f + flame_len * 0.5f, bx, by);
+        SDL_RenderDrawLineF(renderer, ax, ay, bx, by);
+    }
 }
 
 void draw_filled_circle(SDL_Renderer* renderer,
@@ -169,8 +213,8 @@ void FighterDrillScreen::initialize(AppState& state) {
     session_ = std::make_unique<FighterDrillSession>(drill_config_, seed);
 
     // Camera setup
-    camera_.x = drill_config_.world_width / 2.0f;
-    camera_.y = drill_config_.world_height / 2.0f;
+    camera_.x = drill_config_.world.world_width / 2.0f;
+    camera_.y = drill_config_.world.world_height / 2.0f;
     camera_.zoom = 0.3f;
     camera_.following = false;
     camera_mode_ = CameraMode::Swarm;
@@ -251,48 +295,40 @@ bool FighterDrillScreen::handle_input(UIManager& ui) {
 void FighterDrillScreen::run_tick() {
     if (!session_ || session_->is_over()) return;
 
-    DrillPhase phase = session_->phase();
+    const DrillPhase phase = session_->phase();
     const auto& ships = session_->ships();
 
+    // Build scripted squad leader inputs per ship
+    std::vector<SquadLeaderFighterInputs> sl_inputs(ships.size());
     for (std::size_t i = 0; i < ships.size(); ++i) {
         if (!ships[i].alive) continue;
 
-        // Compute scripted squad inputs per phase
-        float spacing = 0.0f;
-        float aggression = 0.0f;
-        float squad_target_heading = 0.0f;
-        float squad_target_distance = 0.0f;
+        SquadLeaderFighterInputs& sl = sl_inputs[i];
 
         switch (phase) {
         case DrillPhase::Expand:
-            spacing = 1.0f;
-            aggression = 0.0f;
-            squad_target_heading = 0.0f;
-            squad_target_distance = 0.0f;
+            sl.spacing = 1.0f;
+            sl.aggression = 0.0f;
             break;
         case DrillPhase::Contract:
-            spacing = -1.0f;
-            aggression = 0.0f;
-            squad_target_heading = 0.0f;
-            squad_target_distance = 0.0f;
+            sl.spacing = -1.0f;
+            sl.aggression = 0.0f;
             break;
         case DrillPhase::Attack: {
-            spacing = 0.0f;
-            aggression = 1.0f;
+            sl.spacing = 0.0f;
+            sl.aggression = 1.0f;
             // Compute heading/distance to starbase
             const auto& starbase = session_->starbase();
             auto dr = compute_dir_range(
                 ships[i].x, ships[i].y,
                 starbase.x, starbase.y,
-                drill_config_.world_width, drill_config_.world_height);
-            // Convert to relative heading (same math as compute_squad_leader_fighter_inputs)
-            float abs_heading = std::atan2(dr.dir_sin, dr.dir_cos);
+                drill_config_.world.world_width, drill_config_.world.world_height);
+            float abs_heading = std::atan2(dr.dir_sin, -dr.dir_cos);
             float rel = abs_heading - ships[i].rotation;
-            // Normalize to [-pi, pi]
             while (rel > std::numbers::pi_v<float>) rel -= 2.0f * std::numbers::pi_v<float>;
             while (rel < -std::numbers::pi_v<float>) rel += 2.0f * std::numbers::pi_v<float>;
-            squad_target_heading = rel / std::numbers::pi_v<float>;  // normalize to [-1, 1]
-            squad_target_distance = dr.range;
+            sl.squad_target_heading = rel / std::numbers::pi_v<float>;
+            sl.squad_target_distance = dr.range;
             break;
         }
         case DrillPhase::Done:
@@ -300,50 +336,37 @@ void FighterDrillScreen::run_tick() {
         }
 
         // Compute center heading/distance
-        float squad_center_heading = 0.0f;
-        float squad_center_distance = 0.0f;
         {
             auto dr = compute_dir_range(
                 ships[i].x, ships[i].y,
                 session_->squad_center_x(), session_->squad_center_y(),
-                drill_config_.world_width, drill_config_.world_height);
-            float abs_heading = std::atan2(dr.dir_sin, dr.dir_cos);
+                drill_config_.world.world_width, drill_config_.world.world_height);
+            float abs_heading = std::atan2(dr.dir_sin, -dr.dir_cos);
             float rel = abs_heading - ships[i].rotation;
             while (rel > std::numbers::pi_v<float>) rel -= 2.0f * std::numbers::pi_v<float>;
             while (rel < -std::numbers::pi_v<float>) rel += 2.0f * std::numbers::pi_v<float>;
-            squad_center_heading = rel / std::numbers::pi_v<float>;
-            squad_center_distance = dr.range;
+            sl.squad_center_heading = rel / std::numbers::pi_v<float>;
+            sl.squad_center_distance = dr.range;
         }
-
-        // Build arena sensor input context
-        // All ships on same team (0) — they see each other as friendly
-        auto ctx = ArenaQueryContext::for_ship(
-            ships[i], i, 0,
-            drill_config_.world_width, drill_config_.world_height,
-            session_->towers(), session_->tokens(),
-            session_->ships(), drill_ship_teams_, session_->bullets());
-
-        auto input = build_arena_ship_input(
-            ship_design_, ctx,
-            squad_target_heading, squad_target_distance,
-            squad_center_heading, squad_center_distance,
-            aggression, spacing,
-            recurrent_states_[i]);
-
-        // Capture input for followed ship
-        if (static_cast<int>(i) == selected_ship_) {
-            last_input_ = input;
-        }
-
-        auto output = nets_[i].forward(input);
-        auto decoded = decode_output(output, ship_design_.memory_slots);
-
-        session_->set_ship_actions(i, decoded.up, decoded.down,
-                                   decoded.left, decoded.right, decoded.shoot);
-        recurrent_states_[i] = decoded.memory;
     }
 
-    session_->tick();
+    // Prepare capture vector for followed ship's input
+    std::vector<std::vector<float>> fighter_inputs_capture(ships.size());
+
+    // Run nets + physics via tick function
+    auto events = tick_fighters_scripted(
+        session_->world(), ship_design_, nets_,
+        sl_inputs, recurrent_states_, drill_ship_teams_,
+        &fighter_inputs_capture);
+
+    // Capture followed ship's input for net viewer
+    if (selected_ship_ >= 0
+        && static_cast<std::size_t>(selected_ship_) < fighter_inputs_capture.size()) {
+        last_input_ = fighter_inputs_capture[static_cast<std::size_t>(selected_ship_)];
+    }
+
+    // Process scoring + phase transitions
+    session_->process_tick_events(events);
 }
 
 // ==================== Evolution ====================
@@ -411,9 +434,9 @@ void FighterDrillScreen::render_world(Renderer& renderer) {
     switch (camera_mode_) {
     case CameraMode::Swarm: {
         // Zoom to fit bounding box of all alive ships
-        float min_x = drill_config_.world_width;
+        float min_x = drill_config_.world.world_width;
         float max_x = 0.0f;
-        float min_y = drill_config_.world_height;
+        float min_y = drill_config_.world.world_height;
         float max_y = 0.0f;
         int alive_count = 0;
 
@@ -489,7 +512,7 @@ void FighterDrillScreen::render_world(Renderer& renderer) {
     }
 
     // Clamp camera to world bounds
-    camera_.clamp_to_world(drill_config_.world_width, drill_config_.world_height,
+    camera_.clamp_to_world(drill_config_.world.world_width, drill_config_.world.world_height,
                            game_panel_w, game_panel_h);
 
     SDL_Renderer* sdl = renderer.renderer_;
@@ -591,6 +614,8 @@ void FighterDrillScreen::render_world(Renderer& renderer) {
             draw_rotated_triangle(sdl, sx, sy, ship_screen_size,
                                   ship.rotation,
                                   100, 180, 255, alpha);
+            draw_damage_effects(sdl, sx, sy, ship_screen_size,
+                                ship.rotation, ship.damage_level());
         }
 
         // Follow indicator on selected ship

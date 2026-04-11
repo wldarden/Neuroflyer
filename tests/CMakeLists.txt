@@ -23,8 +23,12 @@ add_executable(neuroflyer_tests
     attack_run_session_test.cpp
     skirmish_test.cpp
     skirmish_tournament_test.cpp
+    team_skirmish_test.cpp
+    arena_world_test.cpp
+    arena_tick_test.cpp
     ../src/engine/game.cpp
     ../src/engine/arena_session.cpp
+    ../src/engine/arena_world.cpp
     ../src/engine/ray.cpp
     ../src/engine/sensor_engine.cpp
     ../src/engine/evolution.cpp
@@ -33,6 +37,7 @@ add_executable(neuroflyer_tests
     ../src/engine/genome_manager.cpp
     ../src/engine/mrca_tracker.cpp
     ../src/engine/arena_sensor.cpp
+    ../src/engine/entity_grid.cpp
     ../src/engine/team_evolution.cpp
     ../src/engine/arena_match.cpp
     ../src/engine/sector_grid.cpp
@@ -41,6 +46,8 @@ add_executable(neuroflyer_tests
     ../src/engine/attack_run_session.cpp
     ../src/engine/skirmish.cpp
     ../src/engine/skirmish_tournament.cpp
+    ../src/engine/team_skirmish.cpp
+    ../src/engine/arena_tick.cpp
 )
 target_include_directories(neuroflyer_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../include

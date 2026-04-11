@@ -109,13 +109,14 @@ SquadLeaderOrder run_squad_leader(
     float squad_health,
     float home_heading_sin, float home_heading_cos, float home_distance,
     float home_health,
-    float squad_spacing,
     float cmd_target_heading_sin, float cmd_target_heading_cos, float cmd_target_distance,
     const NtmResult& ntm,
     float own_base_x, float own_base_y,
-    float enemy_base_x, float enemy_base_y) {
-
-    float squad_spacing_val = squad_spacing;
+    float enemy_base_x, float enemy_base_y,
+    float enemy_alive_fraction,
+    float time_remaining,
+    float squad_center_x_norm,
+    float squad_center_y_norm) {
 
     std::vector<float> input = {
         squad_health,
@@ -123,7 +124,6 @@ SquadLeaderOrder run_squad_leader(
         home_heading_cos,
         home_distance,
         home_health,
-        squad_spacing_val,
         cmd_target_heading_sin,
         cmd_target_heading_cos,
         cmd_target_distance,
@@ -131,7 +131,11 @@ SquadLeaderOrder run_squad_leader(
         ntm.active ? ntm.heading_sin : 0.0f,
         ntm.active ? ntm.heading_cos : 0.0f,
         ntm.active ? ntm.distance : 0.0f,
-        ntm.active ? ntm.threat_score : 0.0f
+        ntm.active ? ntm.threat_score : 0.0f,
+        enemy_alive_fraction,
+        time_remaining,
+        squad_center_x_norm,
+        squad_center_y_norm
     };
 
     auto output = leader_net.forward(std::span<const float>(input));
@@ -195,7 +199,7 @@ SquadLeaderFighterInputs compute_squad_leader_fighter_inputs(
         fighter_x, fighter_y,
         order.target_x, order.target_y,
         world_w, world_h);
-    float target_world_angle = std::atan2(target_dr.dir_sin, target_dr.dir_cos);
+    float target_world_angle = std::atan2(target_dr.dir_sin, -target_dr.dir_cos);
     float target_relative = target_world_angle - fighter_rotation;
     while (target_relative > PI) target_relative -= 2.0f * PI;
     while (target_relative < -PI) target_relative += 2.0f * PI;
@@ -207,7 +211,7 @@ SquadLeaderFighterInputs compute_squad_leader_fighter_inputs(
         fighter_x, fighter_y,
         squad_center_x, squad_center_y,
         world_w, world_h);
-    float center_world_angle = std::atan2(center_dr.dir_sin, center_dr.dir_cos);
+    float center_world_angle = std::atan2(center_dr.dir_sin, -center_dr.dir_cos);
     float center_relative = center_world_angle - fighter_rotation;
     while (center_relative > PI) center_relative -= 2.0f * PI;
     while (center_relative < -PI) center_relative += 2.0f * PI;

@@ -1,10 +1,14 @@
 #include <neuroflyer/evolution.h>
 #include <neuroflyer/ship_design.h>
 #include <neuroflyer/snapshot_utils.h>
+#include "../src/demos/mlp_to_graph.h"
+
+#include <neuralnet/graph_network.h>
 
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <set>
 
 namespace nf = neuroflyer;
 
@@ -60,6 +64,86 @@ TEST(EvolutionTest, TopologyMutationAddNode) {
 
     // Should have more weight values now
     EXPECT_GT(ind.genome.total_values(), original_total);
+}
+
+TEST(EvolutionTest, AddNodePreservesWeightLayoutInNextLayer) {
+    // Create a net with 3 inputs -> 4 hidden -> 2 outputs.
+    // Set all weights in the output layer (layer 1) to known values,
+    // then add a node to the hidden layer (layer 0) making it 5 nodes.
+    // The output layer should preserve existing connections (4 per output
+    // neuron) and add one new connection per output neuron (dense).
+    std::mt19937 rng(99);
+    auto ind = nf::Individual::random(3, {4}, 2, rng);
+
+    // Layer 1 (output layer): 2 outputs × 4 inputs = 8 weights, row-major.
+    // Set to known pattern: weight[row][col] = (row+1)*10 + col
+    auto& out_weights = ind.genome.gene("layer_1_weights").values;
+    ASSERT_EQ(out_weights.size(), 8u);  // 2 × 4
+    for (std::size_t row = 0; row < 2; ++row) {
+        for (std::size_t col = 0; col < 4; ++col) {
+            out_weights[row * 4 + col] = static_cast<float>((row + 1) * 10 + col);
+        }
+    }
+    // Verify: out_weights = [10, 11, 12, 13, 20, 21, 22, 23]
+
+    // Force add_node to target layer 0 (only hidden layer) by fixing the rng
+    // — but add_node picks a random hidden layer. With {4} there's only one
+    // hidden layer (layer 0), so it always picks layer 0.
+    nf::add_node(ind, rng);
+
+    // Hidden layer should now have 5 nodes
+    ASSERT_EQ(ind.topology.layers[0].output_size, 5u);
+
+    // Output layer weights should now be 2 × 5 = 10 values
+    const auto& new_out = ind.genome.gene("layer_1_weights").values;
+    ASSERT_EQ(new_out.size(), 10u);
+
+    // Existing connections must be preserved at correct positions:
+    // Row 0: [10, 11, 12, 13, <new>]
+    // Row 1: [20, 21, 22, 23, <new>]
+    for (std::size_t row = 0; row < 2; ++row) {
+        for (std::size_t col = 0; col < 4; ++col) {
+            float expected = static_cast<float>((row + 1) * 10 + col);
+            EXPECT_FLOAT_EQ(new_out[row * 5 + col], expected)
+                << "row=" << row << " col=" << col;
+        }
+        // The new column (col 4) should be filled (any value is fine,
+        // just verify it exists at the correct position)
+    }
+}
+
+TEST(EvolutionTest, RemoveNodePreservesWeightLayoutInNextLayer) {
+    std::mt19937 rng(99);
+    auto ind = nf::Individual::random(3, {4}, 2, rng);
+
+    // Set output layer weights to known pattern
+    auto& out_weights = ind.genome.gene("layer_1_weights").values;
+    ASSERT_EQ(out_weights.size(), 8u);  // 2 × 4
+    for (std::size_t row = 0; row < 2; ++row) {
+        for (std::size_t col = 0; col < 4; ++col) {
+            out_weights[row * 4 + col] = static_cast<float>((row + 1) * 10 + col);
+        }
+    }
+
+    nf::remove_node(ind, rng);
+
+    // Hidden layer should now have 3 nodes
+    ASSERT_EQ(ind.topology.layers[0].output_size, 3u);
+
+    // Output layer weights should now be 2 × 3 = 6 values
+    const auto& new_out = ind.genome.gene("layer_1_weights").values;
+    ASSERT_EQ(new_out.size(), 6u);
+
+    // First 3 columns of each row should be preserved:
+    // Row 0: [10, 11, 12]   (column 3 dropped)
+    // Row 1: [20, 21, 22]   (column 3 dropped)
+    for (std::size_t row = 0; row < 2; ++row) {
+        for (std::size_t col = 0; col < 3; ++col) {
+            float expected = static_cast<float>((row + 1) * 10 + col);
+            EXPECT_FLOAT_EQ(new_out[row * 3 + col], expected)
+                << "row=" << row << " col=" << col;
+        }
+    }
 }
 
 TEST(EvolutionTest, PopulationEvolves) {
@@ -308,5 +392,138 @@ TEST(EvolutionTest, AdaptIndividualLegacyNoIds) {
     auto [adapted, report] = nf::adapt_individual_inputs(
         ind, {"a", "b", "c", "d", "e"}, design, rng);
     EXPECT_FALSE(report.needed());
+}
+
+// --- mlp_to_graph tests ---
+
+TEST(EvolutionTest, MlpToGraphGenomeDenseTopology) {
+    std::mt19937 rng(42);
+    auto ind = nf::Individual::random(4, {3}, 2, rng);
+
+    nf::Snapshot snap;
+    snap.topology = ind.topology;
+    snap.ship_design = nf::ShipDesign{};
+
+    auto genome = mlp_snapshot_to_graph_genome(snap, rng);
+
+    // Node counts: 4 input + 3 hidden + 2 output = 9
+    ASSERT_EQ(genome.nodes.size(), 9u);
+
+    std::size_t input_count = 0, hidden_count = 0, output_count = 0;
+    for (const auto& n : genome.nodes) {
+        if (n.role == evolve::NodeRole::Input) ++input_count;
+        else if (n.role == evolve::NodeRole::Hidden) ++hidden_count;
+        else if (n.role == evolve::NodeRole::Output) ++output_count;
+    }
+    EXPECT_EQ(input_count, 4u);
+    EXPECT_EQ(hidden_count, 3u);
+    EXPECT_EQ(output_count, 2u);
+
+    // Connection counts: (4*3) + (3*2) = 12 + 6 = 18 dense connections
+    EXPECT_EQ(genome.connections.size(), 18u);
+    for (const auto& c : genome.connections) {
+        EXPECT_TRUE(c.enabled);
+    }
+
+    // All innovation numbers should be unique
+    std::set<uint32_t> innovations;
+    for (const auto& c : genome.connections) {
+        innovations.insert(c.innovation);
+    }
+    EXPECT_EQ(innovations.size(), genome.connections.size());
+
+    // Should build a valid GraphNetwork
+    neuralnet::GraphNetwork net(genome);
+    EXPECT_EQ(net.input_size(), 4u);
+    EXPECT_EQ(net.output_size(), 2u);
+
+    // Forward pass should work
+    std::vector<float> input = {1.0f, -0.5f, 0.2f, 0.8f};
+    auto output = net.forward(input);
+    EXPECT_EQ(output.size(), 2u);
+}
+
+TEST(EvolutionTest, MlpToGraphGenomeMultipleHiddenLayers) {
+    std::mt19937 rng(42);
+    auto ind = nf::Individual::random(7, {4, 8}, 1, rng);
+
+    nf::Snapshot snap;
+    snap.topology = ind.topology;
+    snap.ship_design = nf::ShipDesign{};
+
+    auto genome = mlp_snapshot_to_graph_genome(snap, rng);
+
+    // 7 input + 4 hidden + 8 hidden + 1 output = 20 nodes
+    EXPECT_EQ(genome.nodes.size(), 20u);
+
+    // (7*4) + (4*8) + (8*1) = 28 + 32 + 8 = 68 connections
+    EXPECT_EQ(genome.connections.size(), 68u);
+
+    neuralnet::GraphNetwork net(genome);
+    EXPECT_EQ(net.input_size(), 7u);
+    EXPECT_EQ(net.output_size(), 1u);
+
+    std::vector<float> input(7, 0.5f);
+    auto output = net.forward(input);
+    EXPECT_EQ(output.size(), 1u);
+}
+
+TEST(EvolutionTest, MlpToGraphWithWeightsPreservesValues) {
+    std::mt19937 rng(42);
+    auto ind = nf::Individual::random(3, {2}, 1, rng);
+    auto net_mlp = ind.build_network();
+
+    nf::Snapshot snap;
+    snap.topology = ind.topology;
+    snap.ship_design = nf::ShipDesign{};
+    for (std::size_t l = 0; l < ind.topology.layers.size(); ++l) {
+        std::string lp = "layer_" + std::to_string(l);
+        if (ind.genome.has_gene(lp + "_weights")) {
+            const auto& wg = ind.genome.gene(lp + "_weights");
+            snap.weights.insert(snap.weights.end(), wg.values.begin(), wg.values.end());
+        }
+        if (ind.genome.has_gene(lp + "_biases")) {
+            const auto& bg = ind.genome.gene(lp + "_biases");
+            snap.weights.insert(snap.weights.end(), bg.values.begin(), bg.values.end());
+        }
+    }
+
+    auto genome = mlp_snapshot_to_graph_genome_with_weights(snap);
+    neuralnet::GraphNetwork net_graph(genome);
+
+    std::vector<float> input = {0.5f, -0.3f, 0.8f};
+    auto out_mlp = net_mlp.forward(input);
+    auto out_graph = net_graph.forward(input);
+
+    ASSERT_EQ(out_mlp.size(), out_graph.size());
+    for (std::size_t i = 0; i < out_mlp.size(); ++i) {
+        EXPECT_NEAR(out_mlp[i], out_graph[i], 1e-5f) << "output " << i;
+    }
+}
+
+TEST(EvolutionTest, MlpToGraphWithWeightsTargetInputSize) {
+    std::mt19937 rng(42);
+    auto ind = nf::Individual::random(3, {2}, 1, rng);
+
+    nf::Snapshot snap;
+    snap.topology = ind.topology;
+    snap.ship_design = nf::ShipDesign{};
+    for (std::size_t l = 0; l < ind.topology.layers.size(); ++l) {
+        std::string lp = "layer_" + std::to_string(l);
+        if (ind.genome.has_gene(lp + "_weights"))
+            for (auto v : ind.genome.gene(lp + "_weights").values) snap.weights.push_back(v);
+        if (ind.genome.has_gene(lp + "_biases"))
+            for (auto v : ind.genome.gene(lp + "_biases").values) snap.weights.push_back(v);
+    }
+
+    auto genome = mlp_snapshot_to_graph_genome_with_weights(snap, 5, 1);
+    neuralnet::GraphNetwork net(genome);
+
+    EXPECT_EQ(net.input_size(), 5u);
+    EXPECT_EQ(net.output_size(), 1u);
+
+    std::vector<float> input(5, 0.5f);
+    auto output = net.forward(input);
+    EXPECT_EQ(output.size(), 1u);
 }
 

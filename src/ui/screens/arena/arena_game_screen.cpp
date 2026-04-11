@@ -6,8 +6,8 @@
 #include <neuroflyer/ui/ui_manager.h>
 
 #include <neuroflyer/app_state.h>
+#include <neuroflyer/arena_tick.h>
 #include <neuroflyer/renderer.h>
-#include <neuroflyer/sector_grid.h>
 #include <neuroflyer/sensor_engine.h>
 #include <neuroflyer/snapshot_io.h>
 #include <neuroflyer/snapshot_utils.h>
@@ -18,10 +18,8 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cmath>
 #include <filesystem>
 #include <iostream>
-#include <limits>
 #include <memory>
 
 namespace neuroflyer {
@@ -39,7 +37,7 @@ ArenaGameScreen::~ArenaGameScreen() {
 
 void ArenaGameScreen::initialize(AppState& state) {
     // Arena currently only supports exactly 2 teams
-    assert(config_.num_teams == 2 && "Arena mode requires exactly 2 teams");
+    assert(config_.world.num_teams == 2 && "Arena mode requires exactly 2 teams");
 
     // Create team population
     // If pending population exists, use a legacy ship design. Otherwise create fresh.
@@ -116,8 +114,8 @@ void ArenaGameScreen::initialize(AppState& state) {
     start_new_match(state);
 
     // Camera setup
-    camera_.x = config_.world_width / 2.0f;
-    camera_.y = config_.world_height / 2.0f;
+    camera_.x = config_.world.world_width / 2.0f;
+    camera_.y = config_.world.world_height / 2.0f;
     camera_.zoom = 0.5f;
     camera_.following = true;
     camera_.follow_index = 0;
@@ -259,135 +257,42 @@ void ArenaGameScreen::handle_input(UIManager& ui) {
 void ArenaGameScreen::tick_arena(AppState& /*state*/) {
     if (!arena_ || arena_->is_over()) return;
 
-    std::size_t total_ships = arena_->ships().size();
+    const std::size_t total_ships = arena_->ships().size();
+    const std::size_t num_teams = config_.world.num_teams;
 
-    // 1. Build sector grid
-    SectorGrid grid(config_.world_width, config_.world_height, config_.sector_size);
-    for (std::size_t i = 0; i < total_ships; ++i) {
-        if (arena_->ships()[i].alive) {
-            grid.insert(i, arena_->ships()[i].x, arena_->ships()[i].y);
-        }
-    }
-    for (std::size_t b = 0; b < arena_->bases().size(); ++b) {
-        if (arena_->bases()[b].alive()) {
-            grid.insert(total_ships + b, arena_->bases()[b].x, arena_->bases()[b].y);
-        }
-    }
+    // Prepare capture vectors for visualization
+    std::vector<SquadLeaderFighterInputs> sl_inputs_capture(total_ships);
+    std::vector<std::vector<float>> leader_inputs_capture(num_teams);
+    std::vector<std::vector<float>> fighter_inputs_capture(total_ships);
 
-    // 2. Per team: NTM + squad leader -> SquadLeaderOrder
-    std::vector<SquadLeaderOrder> team_orders(config_.num_teams);
-    std::vector<float> squad_center_xs(config_.num_teams, 0.0f);
-    std::vector<float> squad_center_ys(config_.num_teams, 0.0f);
+    // Run full NTM -> squad leader -> fighter pipeline + physics
+    auto events = tick_arena_with_leader(
+        arena_->world(), config_.world, ship_design_,
+        ntm_nets_, leader_nets_, fighter_nets_,
+        recurrent_states_, ship_teams_,
+        config_.time_limit_ticks,
+        config_.ntm_sector_radius, config_.sector_size,
+        &sl_inputs_capture, &leader_inputs_capture, &fighter_inputs_capture);
 
-    for (std::size_t t = 0; t < config_.num_teams; ++t) {
-        int team = static_cast<int>(t);
-        auto stats = arena_->compute_squad_stats(team, 0);
-        squad_center_xs[t] = stats.centroid_x;
-        squad_center_ys[t] = stats.centroid_y;
+    // Extract viz data for the followed ship
+    if (camera_.following && selected_ship_ >= 0
+        && static_cast<std::size_t>(selected_ship_) < total_ships) {
+        const auto si = static_cast<std::size_t>(selected_ship_);
 
-        if (stats.alive_fraction < 1e-6f) continue;
-
-        auto threats = gather_near_threats(
-            grid, stats.centroid_x, stats.centroid_y,
-            config_.ntm_sector_radius, team,
-            arena_->ships(), ship_teams_, arena_->bases());
-
-        auto ntm = run_ntm_threat_selection(
-            ntm_nets_[t], stats.centroid_x, stats.centroid_y,
-            stats.alive_fraction, threats,
-            config_.world_width, config_.world_height);
-
-        float own_base_x = arena_->bases()[t].x, own_base_y = arena_->bases()[t].y;
-        float own_base_hp = arena_->bases()[t].hp_normalized();
-        float enemy_base_x = 0, enemy_base_y = 0;
-        float min_dist_sq = std::numeric_limits<float>::max();
-        for (const auto& base : arena_->bases()) {
-            if (base.team_id == team) continue;
-            float dx = stats.centroid_x - base.x, dy = stats.centroid_y - base.y;
-            float dsq = dx * dx + dy * dy;
-            if (dsq < min_dist_sq) { min_dist_sq = dsq; enemy_base_x = base.x; enemy_base_y = base.y; }
+        // Capture fighter input
+        if (!fighter_inputs_capture[si].empty()) {
+            last_fighter_input_ = fighter_inputs_capture[si];
         }
 
-        float world_diag = std::sqrt(config_.world_width * config_.world_width +
-                                      config_.world_height * config_.world_height);
-        float home_dx = own_base_x - stats.centroid_x, home_dy = own_base_y - stats.centroid_y;
-        float home_dist_raw = std::sqrt(home_dx * home_dx + home_dy * home_dy);
-        float home_distance = home_dist_raw / world_diag;
-        float home_heading_sin = (home_dist_raw > 1e-6f) ? home_dx / home_dist_raw : 0.0f;
-        float home_heading_cos = (home_dist_raw > 1e-6f) ? home_dy / home_dist_raw : 0.0f;
-        float cmd_dx = enemy_base_x - stats.centroid_x, cmd_dy = enemy_base_y - stats.centroid_y;
-        float cmd_dist_raw = std::sqrt(cmd_dx * cmd_dx + cmd_dy * cmd_dy);
-        float cmd_heading_sin = (cmd_dist_raw > 1e-6f) ? cmd_dx / cmd_dist_raw : 0.0f;
-        float cmd_heading_cos = (cmd_dist_raw > 1e-6f) ? cmd_dy / cmd_dist_raw : 0.0f;
-        float cmd_target_distance = cmd_dist_raw / world_diag;
-
-        team_orders[t] = run_squad_leader(
-            leader_nets_[t], stats.alive_fraction,
-            home_heading_sin, home_heading_cos, home_distance,
-            own_base_hp, stats.squad_spacing,
-            cmd_heading_sin, cmd_heading_cos, cmd_target_distance,
-            ntm, own_base_x, own_base_y, enemy_base_x, enemy_base_y);
-
-        // Capture squad leader input for the followed ship's team
-        if (camera_.following
-            && selected_ship_ >= 0
-            && static_cast<std::size_t>(selected_ship_) < arena_->ships().size()
-            && ship_teams_[static_cast<std::size_t>(selected_ship_)] == static_cast<int>(t)) {
-            last_leader_input_ = {
-                stats.alive_fraction,
-                home_heading_sin, home_heading_cos, home_distance,
-                own_base_hp, stats.squad_spacing,
-                cmd_heading_sin, cmd_heading_cos, cmd_target_distance,
-                ntm.active ? 1.0f : 0.0f,
-                ntm.active ? ntm.heading_sin : 0.0f,
-                ntm.active ? ntm.heading_cos : 0.0f,
-                ntm.active ? ntm.distance : 0.0f,
-                ntm.active ? ntm.threat_score : 0.0f
-            };
+        // Capture leader input for the followed ship's team
+        const auto t = static_cast<std::size_t>(ship_teams_[si]);
+        if (t < leader_inputs_capture.size() && !leader_inputs_capture[t].empty()) {
+            last_leader_input_ = leader_inputs_capture[t];
         }
     }
 
-    // 3. Per fighter: compute squad leader fighter inputs + build arena input
-    for (std::size_t i = 0; i < total_ships; ++i) {
-        if (!arena_->ships()[i].alive) continue;
-
-        int team = ship_teams_[i];
-        auto t = static_cast<std::size_t>(team);
-
-        auto sl_inputs = compute_squad_leader_fighter_inputs(
-            arena_->ships()[i].x, arena_->ships()[i].y,
-            arena_->ships()[i].rotation,
-            team_orders[t],
-            squad_center_xs[t], squad_center_ys[t],
-            config_.world_width, config_.world_height);
-
-        auto ctx = ArenaQueryContext::for_ship(
-            arena_->ships()[i], i, team,
-            config_.world_width, config_.world_height,
-            arena_->towers(), arena_->tokens(),
-            arena_->ships(), ship_teams_, arena_->bullets());
-
-        auto input = build_arena_ship_input(
-            ship_design_, ctx,
-            sl_inputs.squad_target_heading, sl_inputs.squad_target_distance,
-            sl_inputs.squad_center_heading, sl_inputs.squad_center_distance,
-            sl_inputs.aggression, sl_inputs.spacing,
-            recurrent_states_[i]);
-
-        // Capture fighter input for the followed ship
-        if (camera_.following && i == static_cast<std::size_t>(selected_ship_)) {
-            last_fighter_input_ = input;
-        }
-
-        auto output = fighter_nets_[t].forward(input);
-        auto decoded = decode_output(output, ship_design_.memory_slots);
-
-        arena_->set_ship_actions(i, decoded.up, decoded.down,
-                                 decoded.left, decoded.right, decoded.shoot);
-        recurrent_states_[i] = decoded.memory;
-    }
-
-    arena_->tick();
+    // Process survival tracking, token collection, end conditions
+    arena_->process_tick_events(events);
 }
 
 // ==================== Evolution ====================
@@ -444,7 +349,7 @@ void ArenaGameScreen::render_arena(Renderer& renderer) {
     // Clamp camera to world bounds
     int game_panel_w = renderer.game_w();
     int game_panel_h = renderer.screen_h();
-    camera_.clamp_to_world(config_.world_width, config_.world_height,
+    camera_.clamp_to_world(config_.world.world_width, config_.world.world_height,
                            game_panel_w, game_panel_h);
 
     // Build team assignments vector
@@ -549,10 +454,10 @@ void ArenaGameScreen::render_arena(Renderer& renderer) {
         info.alive_count = arena_->alive_count();
         info.total_count = config_.population_size();
         info.teams_alive = arena_->teams_alive();
-        info.num_teams = config_.num_teams;
+        info.num_teams = config_.world.num_teams;
 
-        info.team_enemy_kills.assign(config_.num_teams, 0);
-        info.team_ally_kills.assign(config_.num_teams, 0);
+        info.team_enemy_kills.assign(config_.world.num_teams, 0);
+        info.team_ally_kills.assign(config_.world.num_teams, 0);
         const auto& ek = arena_->enemy_kills();
         const auto& ak = arena_->ally_kills();
         for (std::size_t i = 0; i < ek.size(); ++i) {
@@ -588,7 +493,7 @@ void ArenaGameScreen::on_draw(AppState& state, Renderer& renderer,
             // Check if round is over
             if (arena_ && arena_->is_over()) {
                 // Compute team fitness for this round
-                for (std::size_t ti = 0; ti < config_.num_teams; ++ti) {
+                for (std::size_t ti = 0; ti < config_.world.num_teams; ++ti) {
                     int team = static_cast<int>(ti);
 
                     // Damage dealt: average of (max_hp - hp) / max_hp for each enemy base
@@ -598,8 +503,8 @@ void ArenaGameScreen::on_draw(AppState& state, Renderer& renderer,
                             damage_dealt += (base.max_hp - base.hp) / base.max_hp;
                         }
                     }
-                    if (config_.num_teams > 1) {
-                        damage_dealt /= static_cast<float>(config_.num_teams - 1);
+                    if (config_.world.num_teams > 1) {
+                        damage_dealt /= static_cast<float>(config_.world.num_teams - 1);
                     }
 
                     // Own survival: own base HP normalized
@@ -618,8 +523,8 @@ void ArenaGameScreen::on_draw(AppState& state, Renderer& renderer,
                     }
                     float alive_frac = ship_total > 0
                         ? ships_alive_count / ship_total : 0.0f;
-                    float token_frac = config_.token_count > 0
-                        ? static_cast<float>(team_tokens) / static_cast<float>(config_.token_count)
+                    float token_frac = config_.world.token_count > 0
+                        ? static_cast<float>(team_tokens) / static_cast<float>(config_.world.token_count)
                         : 0.0f;
 
                     float score = config_.fitness_weight_base_damage * damage_dealt

@@ -61,6 +61,7 @@ private:
     // Net viewer for follow mode
     enum class FollowNetView { Fighter, SquadLeader };
     FollowNetView follow_net_view_ = FollowNetView::Fighter;
+    bool show_target_viz_ = false;  // draw target heading line + circle
     NetViewerViewState net_viewer_state_;
     std::vector<float> last_fighter_input_;
     std::vector<float> last_leader_input_;

@@ -28,8 +28,13 @@ neuralnet_ui::NetRenderConfig build_variant_net_config(
         // Squad leader: fixed strategic inputs, no sensors.
         labels = build_squad_leader_input_labels();
         input_colors.reserve(labels.size());
+        // Inputs 0-7: squad state (yellow), 8-12: NTM-derived (red), 13-16: battlefield state (yellow)
         for (std::size_t i = 0; i < labels.size(); ++i) {
-            input_colors.push_back({249, 202, 36});  // yellow (squad color)
+            if (i >= 8 && i <= 12) {
+                input_colors.push_back({255, 100, 100});  // red (NTM-derived)
+            } else {
+                input_colors.push_back({249, 202, 36});   // yellow (squad state)
+            }
         }
         // Identity order — no reordering needed for squad leader inputs.
         order.resize(labels.size());
