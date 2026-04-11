@@ -17,7 +17,7 @@ struct NtmNetConfig {
 };
 
 struct SquadLeaderNetConfig {
-    std::size_t input_size = 14;
+    std::size_t input_size = 17;
     std::vector<std::size_t> hidden_sizes = {8};
     std::size_t output_size = 5;  // 2 spacing + 3 tactical
 };

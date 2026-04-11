@@ -85,11 +85,14 @@ struct SquadLeaderOrder {
     float squad_health,
     float home_heading_sin, float home_heading_cos, float home_distance,
     float home_health,
-    float squad_spacing,
     float cmd_target_heading_sin, float cmd_target_heading_cos, float cmd_target_distance,
     const NtmResult& ntm,
     float own_base_x, float own_base_y,
-    float enemy_base_x, float enemy_base_y);
+    float enemy_base_x, float enemy_base_y,
+    float enemy_alive_fraction,
+    float time_remaining,
+    float squad_center_x_norm,
+    float squad_center_y_norm);
 
 // ── Fighter Inputs ───────────────────────────────────────────────────────────
 

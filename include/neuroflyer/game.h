@@ -46,6 +46,9 @@ struct Triangle {
     int fire_cooldown = 30;    // from GameConfig
     static constexpr float SIZE = 12.0f;
 
+    float hp = 3.0f;                // current health
+    float max_hp = 3.0f;            // maximum health
+
     float rotation = 0.0f;          // radians, 0 = facing up, CW positive
     float rotation_speed = 0.05f;   // radians per tick
 
@@ -54,6 +57,19 @@ struct Triangle {
     void apply_actions(bool up, bool down, bool left, bool right, bool shoot);
     void apply_arena_actions(bool up, bool down, bool left, bool right, bool shoot);
     void update(float screen_w, float screen_h);
+
+    void take_damage(float amount) {
+        hp = std::max(0.0f, hp - amount);
+        if (hp <= 0.0f) alive = false;
+    }
+
+    /// Number of hits taken: 0 = pristine, 1 = cracked, 2 = on fire
+    [[nodiscard]] int damage_level() const noexcept {
+        const float lost = max_hp - hp;
+        if (lost >= 2.0f) return 2;
+        if (lost >= 1.0f) return 1;
+        return 0;
+    }
 
     // Set by apply_actions/apply_arena_actions, consumed by update
     float dx = 0.0f, dy = 0.0f;

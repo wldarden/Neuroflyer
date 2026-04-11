@@ -376,12 +376,11 @@ std::vector<std::size_t> build_display_order(const ShipDesign& design) {
 
 std::vector<std::string> build_squad_leader_input_labels() {
     return {
-        "Sqd HP",   // squad health
+        "Sqd HP",   // squad health (own alive fraction)
         "Home Sin",  // home heading sin
         "Home Cos",  // home heading cos
         "Home Dst",  // home distance
-        "Home HP",   // home health
-        "Spacing",   // squad spacing
+        "Home HP",   // home base health
         "Cmd Sin",   // commander target heading sin
         "Cmd Cos",   // commander target heading cos
         "Cmd Dst",   // commander target distance
@@ -390,6 +389,10 @@ std::vector<std::string> build_squad_leader_input_labels() {
         "Thr Cos",   // threat heading cos
         "Thr Dst",   // threat distance
         "Thr Scr",   // threat score
+        "Enemy%",    // enemy alive fraction
+        "Time%",     // match time remaining (1.0 → 0.0)
+        "Sqd X",     // squad center X normalized (0-1)
+        "Sqd Y",     // squad center Y normalized (0-1)
     };
 }
 

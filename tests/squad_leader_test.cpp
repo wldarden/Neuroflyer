@@ -140,8 +140,8 @@ TEST(SquadLeader, NtmSelectsHighestThreat) {
 
 TEST(SquadLeader, RunSquadLeaderReturnsValidOrder) {
     std::mt19937 rng(123);
-    // Leader net: 14 inputs, hidden {6}, 5 outputs
-    auto ind = Individual::random(14, {6}, 5, rng);
+    // Leader net: 17 inputs, hidden {6}, 5 outputs
+    auto ind = Individual::random(17, {6}, 5, rng);
     auto net = ind.build_network();
 
     NtmResult ntm;
@@ -157,12 +157,15 @@ TEST(SquadLeader, RunSquadLeaderReturnsValidOrder) {
         0.2f, 0.98f,     // home_heading_sin, home_heading_cos
         0.5f,            // home_distance
         1.0f,            // home_health
-        0.5f,            // squad_spacing
         0.3f, 0.95f,     // cmd_target_heading_sin, cmd_target_heading_cos
         0.4f,            // cmd_target_distance
         ntm,
         1000, 1000,      // own base
-        9000, 9000);     // enemy base
+        9000, 9000,      // enemy base
+        0.8f,            // enemy_alive_fraction
+        0.5f,            // time_remaining
+        0.5f,            // squad_center_x_norm
+        0.5f);           // squad_center_y_norm
 
     // Tactical and spacing are valid enums
     EXPECT_TRUE(
@@ -190,7 +193,7 @@ TEST(SquadLeader, RunSquadLeaderNoThreatFallsBackToStarbase) {
     bool found_attack_ship = false;
     for (int seed = 0; seed < 200; ++seed) {
         std::mt19937 rng(seed);
-        auto ind = Individual::random(14, {6}, 5, rng);
+        auto ind = Individual::random(17, {6}, 5, rng);
         auto net = ind.build_network();
 
         auto order = run_squad_leader(
@@ -199,12 +202,15 @@ TEST(SquadLeader, RunSquadLeaderNoThreatFallsBackToStarbase) {
             0.0f, 1.0f,     // home_heading_sin, home_heading_cos
             0.5f,            // home_distance
             0.5f,            // home_health
-            0.5f,            // squad_spacing
             0.0f, 1.0f,     // cmd_heading_sin, cmd_heading_cos
             0.5f,            // cmd_target_distance
             ntm_inactive,
             1000, 1000,      // own base
-            9000, 9000);     // enemy base
+            9000, 9000,      // enemy base
+            0.5f,            // enemy_alive_fraction
+            0.5f,            // time_remaining
+            0.5f,            // squad_center_x_norm
+            0.5f);           // squad_center_y_norm
 
         if (order.tactical == TacticalOrder::AttackShip) {
             // Fallback: should target enemy starbase since no NTM active

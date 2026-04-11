@@ -31,9 +31,9 @@ TEST(TeamEvolution, CreateTeamIndividual) {
     EXPECT_EQ(ntm_net.input_size(), 7u);
     EXPECT_EQ(ntm_net.output_size(), 1u);
 
-    // Squad leader: 14 -> [8] -> 5
+    // Squad leader: 15 -> [8] -> 5
     auto leader_net = team.build_squad_network();
-    EXPECT_EQ(leader_net.input_size(), 14u);
+    EXPECT_EQ(leader_net.input_size(), 17u);
     EXPECT_EQ(leader_net.output_size(), 5u);
 
     // Fighter: sensors(5) + squad_leader(6) + mem(2) = 13
@@ -75,7 +75,7 @@ TEST(TeamEvolution, EvolveTeamPopulation) {
         auto leader = t.build_squad_network();
         auto fighter = t.build_fighter_network();
         EXPECT_EQ(ntm.input_size(), 7u);
-        EXPECT_EQ(leader.input_size(), 14u);
+        EXPECT_EQ(leader.input_size(), 17u);
         EXPECT_GT(fighter.input_size(), 0u);
     }
 }
